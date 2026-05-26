@@ -57,28 +57,25 @@ const (
 	FullTimer                        // 2
 )
 
-type TakenExperience struct {
-	Name        string
-	Description string
-	Type        ExperienceType // Uni-Student, Part-timer, Full-timer
-	Major       string         // Education, Business, Computer Science, Kitchen, Blue Collar, Working Class, etc.
-	StartDate   CompactDate
-	EndDate     *CompactDate // If null, then it's still ongoing
-}
-
 type ExperienceQualification struct {
 	Type     string
 	Major    []string // if empty, then it can be any major
 	Duration uint8    // in months, if 0, then it can be any duration
 }
 
-type Experience interface {
-	GetName() string
-	GetDescription() string
-	GetType() ExperienceType
-	GetMajor() string
-	GetQualifications() []ExperienceQualification
-	ApplyExperience(pastExperiences []TakenExperience, stat *Stats) bool // returns true if accepted
+type Experience struct {
+	Name            string
+	Description     string
+	Type            ExperienceType
+	Major           string
+	Qualifications  []ExperienceQualification                                 // if empty, then it can be any qualifications
+	ApplyExperience func(pastExperiences []TakenExperience, stat *Stats) bool // returns true if accepted
+}
+
+type TakenExperience struct {
+	Experience
+	StartDate CompactDate
+	EndDate   *CompactDate // If null, then it's still ongoing
 }
 
 type Character struct {
