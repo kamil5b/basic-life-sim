@@ -6,6 +6,6 @@ type Food struct {
 	Temperature float64 // in celcius
 	CanBeCooked bool
 	CanBeMixed  bool
-	CanBeEaten  bool
 	SpoiledDate CompactDate
+	EatAction   func(stat *Stats) // function that applies the effects of eating the food to the player's stats
 }

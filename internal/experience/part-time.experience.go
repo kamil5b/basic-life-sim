@@ -8,7 +8,7 @@ var InternSoftwareEngineer = model.Experience{
 	Type:        model.PartTimer,
 	Major:       "Computer Science",
 	Qualifications: []model.ExperienceQualification{
-		{Type: "UniStudent", Major: []string{"Computer Science"}, Duration: 0},
+		{Type: model.UniStudent, Major: []string{"Computer Science"}, Duration: 0},
 	},
 	ApplyExperience: func(pastExperiences []model.TakenExperience, stat *model.Stats) bool {
 		for _, exp := range pastExperiences {
@@ -27,7 +27,7 @@ var PrivateTeacher = model.Experience{
 	Type:        model.PartTimer,
 	Major:       "Education",
 	Qualifications: []model.ExperienceQualification{
-		{Type: "UniStudent", Major: []string{"Education", "Computer Science"}, Duration: 0},
+		{Type: model.UniStudent, Major: []string{"Education", "Computer Science"}, Duration: 0},
 	},
 	ApplyExperience: func(pastExperiences []model.TakenExperience, stat *model.Stats) bool {
 		for _, exp := range pastExperiences {

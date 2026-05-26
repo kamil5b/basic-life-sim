@@ -58,7 +58,7 @@ const (
 )
 
 type ExperienceQualification struct {
-	Type     string
+	Type     ExperienceType
 	Major    []string // if empty, then it can be any major
 	Duration uint8    // in months, if 0, then it can be any duration
 }
