@@ -29,8 +29,8 @@ type Stats struct {
 
 type RoomItem interface {
 	GetName() string
-	GetType() string
-	GetCategory() string
+	GetType() string     // Furniture, Appliance, Hygiene, Needs, etc.
+	GetCategory() string // Low, Medium-Low, Medium, Medium-High, High
 	WillBlockPath() bool
 	GetDimensions() (width, length, height uint8)
 	DoAction(input string, stat *Stats)
