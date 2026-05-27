@@ -27,13 +27,14 @@ type Stats struct {
 	AvailableNextAction []string
 }
 
-type RoomItem interface {
-	GetName() string
-	GetType() string     // Furniture, Appliance, Hygiene, Needs, etc.
-	GetCategory() string // Low, Medium-Low, Medium, Medium-High, High
-	WillBlockPath() bool
-	GetDimensions() (width, length, height uint8)
-	DoAction(input string, stat *Stats)
+type RoomItem struct {
+	Name                  string
+	Type                  string // Furniture, Appliance, Hygiene, Needs, etc.
+	Category              string // Low, Medium-Low, Medium, Medium-High, High
+	WillBlockPath         bool
+	Width, Length, Height uint8
+	BasePrice             float64
+	DoAction              func(input string, stat *Stats)
 }
 
 type PlacedRoomItem struct {

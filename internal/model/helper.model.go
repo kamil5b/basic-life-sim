@@ -1,9 +1,7 @@
 package model
 
 import (
-	"fmt"
 	"time"
-	"unsafe"
 )
 
 // CompactDate fits Year, Month, and Day into a 4-byte uint32
@@ -32,18 +30,4 @@ func (cd CompactDate) Unpack() (year int, month int, day int) {
 func (cd CompactDate) AsTime() time.Time {
 	y, m, d := cd.Unpack()
 	return time.Date(y, time.Month(m), d, 0, 0, 0, 0, time.UTC)
-}
-
-func main() {
-	// 1. Pack "01/02/15" (Assuming Feb 1st, 2015)
-	packed := NewCompactDate(2015, 2, 1)
-	fmt.Printf("Packed Size: %d bytes\n", unsafe.Sizeof(packed)) // 4 bytes
-
-	// 2. Unpack raw integers
-	y, m, d := packed.Unpack()
-	fmt.Printf("Unpacked: Year=%d, Month=%d, Day=%d\n", y, m, d)
-
-	// 3. Convert to time.Time for standard Go date operations
-	t := packed.AsTime()
-	fmt.Println("As time.Time:", t.Format("2006-01-02"))
 }
