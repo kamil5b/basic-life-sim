@@ -76,6 +76,8 @@ var (
 		MaxHeight:      3,
 		SharedBathroom: true,
 		SharedKitchen:  true,
+		UpfrontCost:    500,
+		MonthlyCost:    300,
 	}
 	IndekosWithBathroom = model.HomeType{
 		Name:           HomeNameTypeIndekosWithBathroom,
@@ -84,6 +86,8 @@ var (
 		Level:          1,
 		SharedBathroom: false,
 		SharedKitchen:  true,
+		UpfrontCost:    750,
+		MonthlyCost:    450,
 	}
 	SmallApartmentStudio = model.HomeType{
 		Name:           HomeNameTypeSmallApartmentStudio,
@@ -92,6 +96,8 @@ var (
 		Level:          2,
 		SharedBathroom: false,
 		SharedKitchen:  false,
+		UpfrontCost:    2000,
+		MonthlyCost:    800,
 	}
 	SmallApartment1Bedroom = model.HomeType{
 		Name:           HomeNameTypeSmallApartment1BedroomLayout,
@@ -100,5 +106,18 @@ var (
 		MaxHeight:      5,
 		SharedBathroom: false,
 		SharedKitchen:  false,
+		UpfrontCost:    3000,
+		MonthlyCost:    1100,
+	}
+)
+
+var (
+	Level1HomeTypes = []model.HomeType{
+		Indekos,
+		IndekosWithBathroom,
+	}
+	Level2HomeTypes = []model.HomeType{
+		SmallApartmentStudio,
+		SmallApartment1Bedroom,
 	}
 )

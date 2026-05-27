@@ -1,5 +1,7 @@
 package model
 
+import "fmt"
+
 // HomeLayout is main foundation grid for the home
 // 0 is wall / not available for things to place in
 // 1 is floor / available for things to place in
@@ -15,6 +17,35 @@ type HomeType struct {
 	Level          uint8
 	SharedBathroom bool // if true, there will be random events where the bathroom is occupied and the character can't use it, and they will have to wait until it's available again
 	SharedKitchen  bool // if true, there will be random events where the kitchen is occupied and the character can't use it, and they will have to wait until it's available again
+	UpfrontCost    float64
+	MonthlyCost    float64
+}
+
+func (h HomeType) PrintLayout() {
+	fmt.Println("===========================================")
+	fmt.Println("Home Type:", h.Name)
+	fmt.Println("Max Height:", h.MaxHeight)
+	fmt.Println("Shared Bathroom:", h.SharedBathroom)
+	fmt.Println("Shared Kitchen:", h.SharedKitchen)
+	fmt.Printf("Upfront Cost: $%.2f\n", h.UpfrontCost)
+	fmt.Printf("Monthly Cost: $%.2f\n", h.MonthlyCost)
+	fmt.Println("Layout:")
+	for _, row := range h.Layout {
+		for _, cell := range row {
+			switch cell {
+			case 0:
+				fmt.Print("█") // wall
+			case 1:
+				fmt.Print(" ") // floor
+			case 2:
+				fmt.Print("D") // door
+			default:
+				fmt.Print("?") // unknown
+			}
+		}
+		fmt.Println()
+	}
+	fmt.Println("===========================================")
 }
 
 type Stats struct {
