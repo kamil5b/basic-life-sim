@@ -68,16 +68,43 @@ type NeedStat struct {
 	Max     uint16
 }
 
+// ColdZone defines a sub-region within a storage container that has a higher expiry multiplier.
+type ColdZone struct {
+	OriginX, OriginY, OriginZ uint8
+	Width, Length, Height     uint8
+	ExpiryMultiplier          float32
+}
+
+// Contains reports whether slot (x,y,z) falls inside this cold zone.
+func (cz ColdZone) Contains(x, y, z uint8) bool {
+	return x >= cz.OriginX && x < cz.OriginX+cz.Width &&
+		y >= cz.OriginY && y < cz.OriginY+cz.Length &&
+		z >= cz.OriginZ && z < cz.OriginZ+cz.Height
+}
+
 // StorageCapacity defines the internal 3-D dimensions of a storage container (e.g. a fridge).
 // Each slot is 1×1×1 and holds exactly one food item.
 type StorageCapacity struct {
 	Width, Length, Height uint8
-	ExpiryMultiplier      float32 // multiplies BaseExpiryDays for food stored here (e.g. 3.0 = 3x longer)
+	ExpiryMultiplier      float32    // base multiplier for all slots in this container
+	ColdZones             []ColdZone // optional sub-regions with a higher multiplier
 }
 
 // TotalSlots returns the total number of food slots available.
 func (s StorageCapacity) TotalSlots() int {
 	return int(s.Width) * int(s.Length) * int(s.Height)
+}
+
+// MultiplierAt returns the effective expiry multiplier for a given slot.
+// If the slot falls inside a cold zone, the highest applicable zone multiplier is used.
+func (s StorageCapacity) MultiplierAt(x, y, z uint8) float32 {
+	best := s.ExpiryMultiplier
+	for _, cz := range s.ColdZones {
+		if cz.Contains(x, y, z) && cz.ExpiryMultiplier > best {
+			best = cz.ExpiryMultiplier
+		}
+	}
+	return best
 }
 
 type RoomItem struct {
@@ -96,6 +123,7 @@ type RoomItem struct {
 type StoredFood struct {
 	SlotX, SlotY, SlotZ uint8
 	PurchaseDate        CompactDate // date the food was bought, used to compute expiry
+	MultiplierUsed      float32     // effective multiplier at the slot this food occupies
 	UsesRemaining       uint8       // decrements on each eat; item is removed at 0
 	Food                Food
 }

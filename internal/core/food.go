@@ -14,22 +14,25 @@ func eatFromFridge(placed *model.PlacedRoomItem, char *model.Character) {
 		return
 	}
 
-	multiplier := placed.Item.Storage.ExpiryMultiplier
 	cy, cm, cd := char.CurrentDate.Unpack()
 	fmt.Printf("\n--- %s contents --- [Date: %04d-%02d-%02d]\n", placed.Item.Name, cy, cm, cd)
 
-	// build display list (filter nothing — show all so player can see expired items)
 	for i, s := range placed.Stored {
-		expiry := model.ExpiryDate(s.PurchaseDate, s.Food.BaseExpiryDays, multiplier)
-		expired := model.IsExpired(s.PurchaseDate, s.Food.BaseExpiryDays, multiplier, char.CurrentDate)
+		expiry := model.ExpiryDate(s.PurchaseDate, s.Food.BaseExpiryDays, s.MultiplierUsed)
+		expired := model.IsExpired(s.PurchaseDate, s.Food.BaseExpiryDays, s.MultiplierUsed, char.CurrentDate)
 		daysLeft := model.DaysBetween(char.CurrentDate, expiry)
 		ey, em, ed := expiry.Unpack()
 
-		status := fmt.Sprintf("expires %04d-%02d-%02d (%d days left)", ey, em, ed, daysLeft)
+		zoneNote := ""
+		if s.MultiplierUsed > placed.Item.Storage.ExpiryMultiplier {
+			zoneNote = fmt.Sprintf(" [cold zone %.0fx]", s.MultiplierUsed)
+		}
+		status := fmt.Sprintf("expires %04d-%02d-%02d (%d days left)%s", ey, em, ed, daysLeft, zoneNote)
 		if expired {
 			status = fmt.Sprintf("EXPIRED on %04d-%02d-%02d", ey, em, ed)
 		}
-		fmt.Printf("%d. %-18s uses left: %d  %s\n", i+1, s.Food.Name, s.UsesRemaining, status)
+		fmt.Printf("%d. %-18s uses left: %d  slot(%d,%d,%d)  %s\n",
+			i+1, s.Food.Name, s.UsesRemaining, s.SlotX, s.SlotY, s.SlotZ, status)
 	}
 	fmt.Println("0. Back")
 
@@ -46,7 +49,7 @@ func eatFromFridge(placed *model.PlacedRoomItem, char *model.Character) {
 	idx := choice - 1
 	s := &placed.Stored[idx]
 
-	if model.IsExpired(s.PurchaseDate, s.Food.BaseExpiryDays, multiplier, char.CurrentDate) {
+	if model.IsExpired(s.PurchaseDate, s.Food.BaseExpiryDays, s.MultiplierUsed, char.CurrentDate) {
 		fmt.Printf("%s is expired and cannot be eaten.\n", s.Food.Name)
 		return
 	}

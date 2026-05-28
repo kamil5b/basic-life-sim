@@ -173,19 +173,25 @@ func buyFoodIntoFridge(char *model.Character, placed *model.PlacedRoomItem) {
 			continue
 		}
 
+		mult := cap.MultiplierAt(slot[0], slot[1], slot[2])
 		char.CurrentStats.Money -= f.BasePrice
 		placed.Stored = append(placed.Stored, model.StoredFood{
-			SlotX:         slot[0],
-			SlotY:         slot[1],
-			SlotZ:         slot[2],
-			PurchaseDate:  char.CurrentDate,
-			UsesRemaining: f.UsesTotal,
-			Food:          f,
+			SlotX:          slot[0],
+			SlotY:          slot[1],
+			SlotZ:          slot[2],
+			PurchaseDate:   char.CurrentDate,
+			MultiplierUsed: mult,
+			UsesRemaining:  f.UsesTotal,
+			Food:           f,
 		})
-		expiry := model.ExpiryDate(char.CurrentDate, f.BaseExpiryDays, placed.Item.Storage.ExpiryMultiplier)
+		expiry := model.ExpiryDate(char.CurrentDate, f.BaseExpiryDays, mult)
 		ey, em, ed := expiry.Unpack()
-		fmt.Printf("Bought %s → fridge slot (%d,%d,%d), expires %04d-%02d-%02d, uses: %d. Money: $%.2f\n",
-			f.Name, slot[0], slot[1], slot[2], ey, em, ed, f.UsesTotal, char.CurrentStats.Money)
+		zoneNote := ""
+		if mult > cap.ExpiryMultiplier {
+			zoneNote = fmt.Sprintf(" [cold zone %.0fx]", mult)
+		}
+		fmt.Printf("Bought %s → fridge slot (%d,%d,%d)%s, expires %04d-%02d-%02d, uses: %d. Money: $%.2f\n",
+			f.Name, slot[0], slot[1], slot[2], zoneNote, ey, em, ed, f.UsesTotal, char.CurrentStats.Money)
 	}
 }
 
