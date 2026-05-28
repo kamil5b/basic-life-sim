@@ -146,10 +146,12 @@ func printRoom(home model.Home) {
 	fmt.Println("===========================================")
 }
 
-// checkRoomMenu shows the room, lets the player pick a placed item, then pick an action.
+// checkRoomMenu shows the room, lets the player pick a placed item or floor food, then pick an action.
 func checkRoomMenu(char *model.Character) {
 	for {
-		if len(char.CurrentHome.RoomItems) == 0 {
+		hasItems := len(char.CurrentHome.RoomItems) > 0
+		hasFloorFood := len(char.CurrentHome.FloorFood) > 0
+		if !hasItems && !hasFloorFood {
 			fmt.Println("Your room is empty. Buy some items first.")
 			return
 		}
@@ -160,13 +162,21 @@ func checkRoomMenu(char *model.Character) {
 		for i, placed := range char.CurrentHome.RoomItems {
 			fmt.Printf("%d. %s (at %d,%d z=%d facing %s)\n", i+1, placed.Item.Name, placed.X, placed.Y, placed.Z, dirName(placed.Direction))
 		}
+		floorOffset := len(char.CurrentHome.RoomItems)
+		if hasFloorFood {
+			fmt.Printf("%d. Floor food (%d item(s))\n", floorOffset+1, len(char.CurrentHome.FloorFood))
+		}
 
 		var choice int
 		fmt.Scanln(&choice)
 		if choice == 0 {
 			return
 		}
-		if choice < 1 || choice > len(char.CurrentHome.RoomItems) {
+		if hasFloorFood && choice == floorOffset+1 {
+			eatFromFloor(char)
+			continue
+		}
+		if choice < 1 || choice > floorOffset {
 			fmt.Println("Invalid choice.")
 			continue
 		}
@@ -201,6 +211,13 @@ func doItemAction(placed *model.PlacedRoomItem, char *model.Character) {
 	}
 
 	action := actions[choice-1]
+
+	// fridge "eat" delegates to the food selection menu
+	if action == "eat" && placed.Item.Storage != nil {
+		eatFromFridge(placed, char)
+		return
+	}
+
 	placed.Item.DoAction(action, &char.CurrentStats, char)
 	fmt.Printf("You %s using %s.\n", action, placed.Item.Name)
 }

@@ -104,12 +104,13 @@ func mainMenu(char *model.Character) {
 
 func newGame() (model.Character, error) {
 	char := model.Character{
-		Age:        18,
-		Food:       model.NeedStat{Current: 50, Max: 50},
-		Energy:     model.NeedStat{Current: 50, Max: 50},
-		Hygiene:    model.NeedStat{Current: 50, Max: 50},
-		Confidence: model.NeedStat{Current: 50, Max: 50},
-		Strength:   model.NeedStat{Current: 50, Max: 50},
+		Age:         18,
+		CurrentDate: model.NewCompactDate(2025, 1, 1),
+		Food:        model.NeedStat{Current: 50, Max: 50},
+		Energy:      model.NeedStat{Current: 50, Max: 50},
+		Hygiene:     model.NeedStat{Current: 50, Max: 50},
+		Confidence:  model.NeedStat{Current: 50, Max: 50},
+		Strength:    model.NeedStat{Current: 50, Max: 50},
 		CurrentStats: model.Stats{
 			Money: 3000,
 		},

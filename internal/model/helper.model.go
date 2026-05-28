@@ -31,3 +31,27 @@ func (cd CompactDate) AsTime() time.Time {
 	y, m, d := cd.Unpack()
 	return time.Date(y, time.Month(m), d, 0, 0, 0, 0, time.UTC)
 }
+
+// DaysBetween returns how many days have elapsed from 'from' to 'to'.
+// Returns a negative value if 'to' is before 'from'.
+func DaysBetween(from, to CompactDate) int {
+	return int(to.AsTime().Sub(from.AsTime()).Hours() / 24)
+}
+
+// ExpiryDate computes the expiry date given a purchase date, base expiry days, and a storage multiplier.
+// A multiplier <= 0 is treated as 1 (room temperature, no extension).
+func ExpiryDate(purchaseDate CompactDate, baseExpiryDays uint16, multiplier float32) CompactDate {
+	m := multiplier
+	if m <= 0 {
+		m = 1
+	}
+	totalDays := int(float32(baseExpiryDays) * m)
+	t := purchaseDate.AsTime().AddDate(0, 0, totalDays)
+	return NewCompactDate(t.Year(), int(t.Month()), t.Day())
+}
+
+// IsExpired returns true if the food has passed its expiry date given the current date.
+func IsExpired(purchaseDate CompactDate, baseExpiryDays uint16, multiplier float32, currentDate CompactDate) bool {
+	expiry := ExpiryDate(purchaseDate, baseExpiryDays, multiplier)
+	return DaysBetween(expiry, currentDate) > 0
+}

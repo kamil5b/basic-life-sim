@@ -68,6 +68,18 @@ type NeedStat struct {
 	Max     uint16
 }
 
+// StorageCapacity defines the internal 3-D dimensions of a storage container (e.g. a fridge).
+// Each slot is 1×1×1 and holds exactly one food item.
+type StorageCapacity struct {
+	Width, Length, Height uint8
+	ExpiryMultiplier      float32 // multiplies BaseExpiryDays for food stored here (e.g. 3.0 = 3x longer)
+}
+
+// TotalSlots returns the total number of food slots available.
+func (s StorageCapacity) TotalSlots() int {
+	return int(s.Width) * int(s.Length) * int(s.Height)
+}
+
 type RoomItem struct {
 	Name                  string
 	Type                  RoomItemType
@@ -75,8 +87,17 @@ type RoomItem struct {
 	WillBlockPath         bool
 	Width, Length, Height uint8
 	BasePrice             float64
-	Actions               []string // available action verbs passed to DoAction
+	Storage               *StorageCapacity // non-nil for items that can store food
+	Actions               []string         // available action verbs passed to DoAction
 	DoAction              func(input string, stat *Stats, char *Character)
+}
+
+// StoredFood is a food item occupying a slot inside a storage container.
+type StoredFood struct {
+	SlotX, SlotY, SlotZ uint8
+	PurchaseDate        CompactDate // date the food was bought, used to compute expiry
+	UsesRemaining       uint8       // decrements on each eat; item is removed at 0
+	Food                Food
 }
 
 type PlacedRoomItem struct {
@@ -85,11 +106,21 @@ type PlacedRoomItem struct {
 	Z         uint8
 	Direction Direction
 	Item      RoomItem
+	Stored    []StoredFood // food stored inside this item (only used when Item.Storage != nil)
+}
+
+// PlacedFood is a food item sitting directly in the room (not inside a fridge).
+type PlacedFood struct {
+	X, Y, Z       uint8
+	PurchaseDate  CompactDate
+	UsesRemaining uint8
+	Food          Food
 }
 
 type Home struct {
 	Type      HomeType
 	RoomItems []PlacedRoomItem
+	FloorFood []PlacedFood // food placed directly on the floor (no fridge)
 }
 
 type ExperienceType uint8
@@ -127,6 +158,7 @@ type Character struct {
 	CurrentHome Home
 	Experiences []TakenExperience
 	Age         uint8
+	CurrentDate CompactDate
 
 	Food       NeedStat
 	Energy     NeedStat
