@@ -12,7 +12,8 @@ BASIC LIFE SIMULATOR
 
 1. New Game
 2. Load Game
-3. Exit`
+3. Exit
+`
 
 	mvpMainMenu = `
 =============================================
@@ -31,7 +32,8 @@ Actions:
 2. Do Activity
 3. Buy Item
 4. Save Game
-5. Exit Game`
+5. Exit Game
+`
 )
 
 func needPct(need model.NeedStat) uint16 {

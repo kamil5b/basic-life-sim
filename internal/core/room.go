@@ -212,9 +212,14 @@ func doItemAction(placed *model.PlacedRoomItem, char *model.Character) {
 
 	action := actions[choice-1]
 
-	// fridge "eat" delegates to the food selection menu
-	if action == "eat" && placed.Item.Storage != nil {
-		eatFromFridge(placed, char)
+	// fridge actions delegate to dedicated handlers
+	if placed.Item.Storage != nil {
+		switch action {
+		case "eat":
+			eatFromFridge(placed, char)
+		case "store food":
+			storeFoodInFridge(placed, char)
+		}
 		return
 	}
 

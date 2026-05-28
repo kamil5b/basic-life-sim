@@ -14,9 +14,9 @@ var MiniRefrigerator = model.RoomItem{
 		Width: 2, Length: 2, Height: 3,
 		ExpiryMultiplier: 3.0,
 	},
-	Actions: []string{"eat"},
+	Actions: []string{"store food", "eat"},
 	DoAction: func(input string, stat *model.Stats, char *model.Character) {
-		// "eat" is handled by eatFromFridge in core
+		// "store food" and "eat" are handled by storeFoodInFridge/eatFromFridge in core
 	},
 }
 
@@ -40,9 +40,9 @@ var StandardRefrigerator = model.RoomItem{
 			},
 		},
 	},
-	Actions: []string{"eat"},
+	Actions: []string{"store food", "eat"},
 	DoAction: func(input string, stat *model.Stats, char *model.Character) {
-		// "eat" is handled by eatFromFridge in core
+		// "store food" and "eat" are handled by storeFoodInFridge/eatFromFridge in core
 	},
 }
 

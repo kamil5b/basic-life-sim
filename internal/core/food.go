@@ -157,6 +157,72 @@ func removeFoodSourceEntirely(char *model.Character, s foodSource) {
 	}
 }
 
+// storeFoodInFridge lets the player pick floor/surface food and manually place it into a fridge slot.
+func storeFoodInFridge(placed *model.PlacedRoomItem, char *model.Character) {
+	cap := placed.Item.Storage
+
+	// gather food not already inside a fridge
+	var sources []foodSource
+	for _, s := range gatherFoodSources(char) {
+		if s.kind != "fridge" {
+			sources = append(sources, s)
+		}
+	}
+	if len(sources) == 0 {
+		fmt.Println("No food outside the fridge to store.")
+		return
+	}
+
+	used := usedSlotCount(placed)
+	total := cap.TotalSlots()
+	if used >= total {
+		fmt.Println("Refrigerator is full.")
+		return
+	}
+
+	cy, cm, cd := char.CurrentDate.Unpack()
+	fmt.Printf("\n--- Store food in %s (%d/%d slots used) --- [%04d-%02d-%02d]\n",
+		placed.Item.Name, used, total, cy, cm, cd)
+	printFoodSources(sources, char.CurrentDate)
+	fmt.Println("0. Cancel")
+
+	var choice int
+	fmt.Scanln(&choice)
+	if choice == 0 {
+		return
+	}
+	if choice < 1 || choice > len(sources) {
+		fmt.Println("Invalid choice.")
+		return
+	}
+
+	src := sources[choice-1]
+	slot, ok := promptFridgeSlot(placed, cap, src.food)
+	if !ok {
+		return
+	}
+
+	mult := cap.MultiplierAt(slot[0], slot[1], slot[2])
+	removeFoodSourceEntirely(char, src)
+	placed.Stored = append(placed.Stored, model.StoredFood{
+		SlotX:          slot[0],
+		SlotY:          slot[1],
+		SlotZ:          slot[2],
+		PurchaseDate:   src.purchaseDate,
+		MultiplierUsed: mult,
+		UsesRemaining:  src.usesRemaining,
+		Food:           src.food,
+	})
+	expiry := model.ExpiryDate(src.purchaseDate, src.food.BaseExpiryDays, mult)
+	ey, em, ed := expiry.Unpack()
+	zoneNote := ""
+	if mult > cap.ExpiryMultiplier {
+		zoneNote = fmt.Sprintf(" [cold zone %.0fx]", mult)
+	}
+	fmt.Printf("Stored %s in slot (%d,%d,%d)%s, expires %04d-%02d-%02d.\n",
+		src.food.Name, slot[0], slot[1], slot[2], zoneNote, ey, em, ed)
+}
+
 // ─── fridge eat (from checkRoom → doItemAction) ─────────────────────────────
 
 func eatFromFridge(placed *model.PlacedRoomItem, char *model.Character) {

@@ -139,15 +139,10 @@ func buyFoodIntoFridge(char *model.Character, placed *model.PlacedRoomItem) {
 			if char.CurrentStats.Money < f.BasePrice {
 				affordable = " [can't afford]"
 			}
-			_, fits := nextFreeSlot(placed, cap, f)
-			noFit := ""
-			if !fits {
-				noFit = " [no space]"
-			}
-			fmt.Printf("%d. %-18s $%.2f  %dx%dx%d  [%s]%s%s\n",
+			fmt.Printf("%d. %-18s $%.2f  %dx%dx%d  [%s]%s\n",
 				i+1, f.Name, f.BasePrice,
 				f.Width, f.Length, f.Height,
-				f.Type, affordable, noFit)
+				f.Type, affordable)
 		}
 		fmt.Println("0. Back")
 
@@ -167,9 +162,8 @@ func buyFoodIntoFridge(char *model.Character, placed *model.PlacedRoomItem) {
 			continue
 		}
 
-		slot, fits := nextFreeSlot(placed, cap, f)
-		if !fits {
-			fmt.Printf("%s (%dx%dx%d) does not fit in the remaining space.\n", f.Name, f.Width, f.Length, f.Height)
+		slot, ok := promptFridgeSlot(placed, cap, f)
+		if !ok {
 			continue
 		}
 
@@ -263,6 +257,109 @@ func buyFoodToRoom(char *model.Character) {
 		fmt.Printf("Bought %s → room (%d,%d,%d), expires %04d-%02d-%02d, uses: %d. Money: $%.2f\n",
 			f.Name, x, yPos, z, ey, em, ed, f.UsesTotal, char.CurrentStats.Money)
 	}
+}
+
+// printFridgeGrid renders a 2-D layer-by-layer view of the fridge interior.
+// Each layer (z) is shown as a Width×Length grid. Occupied cells show the first letter of the food name.
+func printFridgeGrid(placed *model.PlacedRoomItem) {
+	cap := placed.Item.Storage
+	// build slot map
+	slotMap := make(map[[3]uint8]string)
+	for _, s := range placed.Stored {
+		for dz := uint8(0); dz < s.Food.Height; dz++ {
+			for dy := uint8(0); dy < s.Food.Length; dy++ {
+				for dx := uint8(0); dx < s.Food.Width; dx++ {
+					key := [3]uint8{s.SlotX + dx, s.SlotY + dy, s.SlotZ + dz}
+					slotMap[key] = string([]rune(s.Food.Name)[0:1])
+				}
+			}
+		}
+	}
+
+	fmt.Printf("\n=== %s interior (W=%d L=%d H=%d) ===\n", placed.Item.Name, cap.Width, cap.Length, cap.Height)
+	for z := uint8(0); z < cap.Height; z++ {
+		// determine if this layer is a cold zone
+		coldNote := ""
+		for _, cz := range cap.ColdZones {
+			if z >= cz.OriginZ && z < cz.OriginZ+cz.Height {
+				coldNote = fmt.Sprintf(" [cold zone %.0fx]", cz.ExpiryMultiplier)
+				break
+			}
+		}
+		fmt.Printf(" Layer z=%d%s\n", z, coldNote)
+		// column header
+		fmt.Print("     ")
+		for x := uint8(0); x < cap.Width; x++ {
+			fmt.Printf(" x%-2d", x)
+		}
+		fmt.Println()
+		for y := uint8(0); y < cap.Length; y++ {
+			fmt.Printf(" y%-2d ", y)
+			for x := uint8(0); x < cap.Width; x++ {
+				sym, ok := slotMap[[3]uint8{x, y, z}]
+				if ok {
+					fmt.Printf(" %-3s", sym)
+				} else {
+					fmt.Print(" .  ")
+				}
+			}
+			fmt.Println()
+		}
+	}
+	fmt.Print(" Legend: ")
+	seen := make(map[string]bool)
+	for _, s := range placed.Stored {
+		if !seen[s.Food.Name] {
+			seen[s.Food.Name] = true
+			fmt.Printf("%s=%s  ", string([]rune(s.Food.Name)[0:1]), s.Food.Name)
+		}
+	}
+	fmt.Println(". = empty")
+	fmt.Println("===========================================")
+}
+
+// promptFridgeSlot shows the fridge grid and asks the user to pick a slot for the given food.
+// Returns ([3]uint8, true) on success, ([3]uint8{}, false) on cancel or invalid.
+func promptFridgeSlot(placed *model.PlacedRoomItem, cap *model.StorageCapacity, f model.Food) ([3]uint8, bool) {
+	printFridgeGrid(placed)
+	fmt.Printf("Placing: %s (size %dx%dx%d)\n", f.Name, f.Width, f.Length, f.Height)
+
+	// show cold zone info
+	if len(cap.ColdZones) > 0 {
+		for _, cz := range cap.ColdZones {
+			fmt.Printf("  Cold zone: x%d-%d, y%d-%d, z%d-%d → %.0fx expiry\n",
+				cz.OriginX, cz.OriginX+cz.Width-1,
+				cz.OriginY, cz.OriginY+cz.Length-1,
+				cz.OriginZ, cz.OriginZ+cz.Height-1,
+				cz.ExpiryMultiplier)
+		}
+	}
+
+	fmt.Println("Enter X (or -1 to cancel):")
+	var x int
+	fmt.Scanln(&x)
+	if x < 0 {
+		return [3]uint8{}, false
+	}
+	fmt.Println("Enter Y:")
+	var y int
+	fmt.Scanln(&y)
+	fmt.Println("Enter Z:")
+	var z int
+	fmt.Scanln(&z)
+
+	if x < 0 || y < 0 || z < 0 {
+		fmt.Println("Coordinates must be non-negative.")
+		return [3]uint8{}, false
+	}
+
+	slot := [3]uint8{uint8(x), uint8(y), uint8(z)}
+	occupied := occupiedFoodSlots(placed)
+	if !canFitFood(occupied, cap, f, slot[0], slot[1], slot[2]) {
+		fmt.Printf("Cannot place %s at (%d,%d,%d) — slot occupied or out of bounds.\n", f.Name, x, y, z)
+		return [3]uint8{}, false
+	}
+	return slot, true
 }
 
 // findFridges returns indices into char.CurrentHome.RoomItems for all placed items with Storage.
