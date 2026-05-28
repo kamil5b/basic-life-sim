@@ -4,33 +4,33 @@ import "basic-life-sim/internal/model"
 
 var SmallTV = model.RoomItem{
 	Name:          "Small TV",
-	Type:          "Appliance",
-	Category:      "Low",
+	Type:          model.RoomItemAppliance,
+	Category:      model.CategoryLow,
 	WillBlockPath: true,
 	Width:         2, Length: 1, Height: 1,
 	BasePrice: 100,
-	DoAction: func(input string, stat *model.Stats) {
+	DoAction: func(input string, stat *model.Stats, char *model.Character) {
 		switch input {
 		case "watch":
-			stat.Energy = safeAdd(stat.Energy, 10)
-			stat.Confidence = safeSub(stat.Confidence, 5)
+			char.Energy.Current = safeAdd(char.Energy.Current, 10)
+			char.Confidence.Current = safeSub(char.Confidence.Current, 5)
 		}
 	},
 }
 
 var SmartTV = model.RoomItem{
 	Name:          "Smart TV",
-	Type:          "Appliance",
-	Category:      "Medium-High",
+	Type:          model.RoomItemAppliance,
+	Category:      model.CategoryMediumHigh,
 	WillBlockPath: true,
 	Width:         3, Length: 1, Height: 1,
 	BasePrice: 500,
-	DoAction: func(input string, stat *model.Stats) {
+	DoAction: func(input string, stat *model.Stats, char *model.Character) {
 		switch input {
 		case "watch":
-			stat.Energy = safeAdd(stat.Energy, 15)
+			char.Energy.Current = safeAdd(char.Energy.Current, 15)
 		case "stream":
-			stat.Confidence = safeAdd(stat.Confidence, 5)
+			char.Confidence.Current = safeAdd(char.Confidence.Current, 5)
 		}
 	},
 }

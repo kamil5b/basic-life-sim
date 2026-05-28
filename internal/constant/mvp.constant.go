@@ -5,59 +5,59 @@ import (
 )
 
 var (
-	// LEVEL - 1: INDEKOS (8x8)
+	// LEVEL 1: INDEKOS (8x8)
 
 	// Shared Bathroom, Shared Living Room, Shared Kitchen
 	IndekosLayout = model.HomeLayout{
-		{0, 0, 0, 0, 0, 2, 0, 0},
-		{0, 1, 1, 1, 1, 1, 1, 0},
-		{0, 1, 1, 1, 1, 1, 1, 0},
-		{0, 1, 1, 1, 1, 1, 1, 0},
-		{0, 1, 1, 1, 1, 1, 1, 0},
-		{0, 1, 1, 1, 1, 1, 1, 0},
-		{0, 1, 1, 1, 1, 1, 1, 0},
-		{0, 0, 0, 0, 0, 0, 0, 0},
+		{model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellDoor, model.HomeCellWall, model.HomeCellWall},
+		{model.HomeCellWall, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellWall},
+		{model.HomeCellWall, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellWall},
+		{model.HomeCellWall, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellWall},
+		{model.HomeCellWall, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellWall},
+		{model.HomeCellWall, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellWall},
+		{model.HomeCellWall, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellWall},
+		{model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellWall},
 	}
 	// Private Bathroom, Shared Living Room, Shared Kitchen
 	IndekosWithBathroomLayout = model.HomeLayout{
-		{0, 0, 0, 0, 0, 2, 0, 0},
-		{0, 1, 1, 1, 0, 1, 1, 0},
-		{0, 1, 1, 1, 2, 1, 1, 0},
-		{0, 0, 0, 0, 0, 1, 1, 0},
-		{0, 1, 1, 1, 1, 1, 1, 0},
-		{0, 1, 1, 1, 1, 1, 1, 0},
-		{0, 1, 1, 1, 1, 1, 1, 0},
-		{0, 0, 0, 0, 0, 0, 0, 0},
+		{model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellDoor, model.HomeCellWall, model.HomeCellWall},
+		{model.HomeCellWall, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellWall, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellWall},
+		{model.HomeCellWall, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellDoor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellWall},
+		{model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellWall},
+		{model.HomeCellWall, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellWall},
+		{model.HomeCellWall, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellWall},
+		{model.HomeCellWall, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellWall},
+		{model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellWall},
 	}
 
-	// LEVEL 2: SMALL APARTMENT (10 x 10)
+	// LEVEL 2: SMALL APARTMENT (10x10)
 
 	// Private Bathroom, Private Living Room, Private Kitchen
 	SmallApartmentStudioLayout = model.HomeLayout{
-		{0, 0, 0, 0, 0, 0, 0, 2, 0, 0},
-		{0, 1, 1, 1, 1, 0, 1, 1, 1, 0},
-		{0, 1, 1, 1, 1, 2, 1, 1, 1, 0},
-		{0, 1, 1, 1, 1, 0, 1, 1, 1, 0},
-		{0, 0, 0, 0, 0, 0, 1, 1, 1, 0},
-		{0, 1, 1, 1, 1, 1, 1, 1, 1, 0},
-		{0, 1, 1, 1, 1, 1, 1, 1, 1, 0},
-		{0, 1, 1, 1, 1, 1, 1, 1, 1, 0},
-		{0, 1, 1, 1, 1, 1, 1, 1, 1, 0},
-		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+		{model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellDoor, model.HomeCellWall, model.HomeCellWall},
+		{model.HomeCellWall, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellWall, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellWall},
+		{model.HomeCellWall, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellDoor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellWall},
+		{model.HomeCellWall, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellWall, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellWall},
+		{model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellWall},
+		{model.HomeCellWall, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellWall},
+		{model.HomeCellWall, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellWall},
+		{model.HomeCellWall, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellWall},
+		{model.HomeCellWall, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellWall},
+		{model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellWall},
 	}
 
 	// Private Bathroom, Private Living Room, Private Kitchen, Private Bedroom
 	SmallApartment1BedroomLayout = model.HomeLayout{
-		{0, 0, 0, 0, 0, 0, 0, 2, 0, 0},
-		{0, 1, 1, 1, 1, 0, 1, 1, 1, 0},
-		{0, 1, 1, 1, 1, 2, 1, 1, 1, 0},
-		{0, 1, 1, 1, 1, 0, 1, 1, 1, 0},
-		{0, 0, 0, 0, 0, 0, 1, 1, 1, 0},
-		{0, 1, 1, 1, 1, 0, 1, 1, 1, 0},
-		{0, 1, 1, 1, 1, 2, 1, 1, 1, 0},
-		{0, 1, 1, 1, 1, 0, 1, 1, 1, 0},
-		{0, 1, 1, 1, 1, 0, 1, 1, 1, 0},
-		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+		{model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellDoor, model.HomeCellWall, model.HomeCellWall},
+		{model.HomeCellWall, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellWall, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellWall},
+		{model.HomeCellWall, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellDoor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellWall},
+		{model.HomeCellWall, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellWall, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellWall},
+		{model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellWall},
+		{model.HomeCellWall, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellWall, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellWall},
+		{model.HomeCellWall, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellDoor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellWall},
+		{model.HomeCellWall, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellWall, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellWall},
+		{model.HomeCellWall, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellWall, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellFloor, model.HomeCellWall},
+		{model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellWall, model.HomeCellWall},
 	}
 )
 

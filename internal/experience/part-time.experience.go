@@ -10,10 +10,10 @@ var InternSoftwareEngineer = model.Experience{
 	Qualifications: []model.ExperienceQualification{
 		{Type: model.UniStudent, Major: []string{"Computer Science"}, Duration: 0},
 	},
-	ApplyExperience: func(pastExperiences []model.TakenExperience, stat *model.Stats) bool {
+	ApplyExperience: func(pastExperiences []model.TakenExperience, stat *model.Stats, char *model.Character) bool {
 		for _, exp := range pastExperiences {
 			if exp.Type == model.UniStudent && exp.Major == "Computer Science" {
-				stat.Confidence += 5
+				char.Confidence.Current += 5
 				return true
 			}
 		}
@@ -29,10 +29,10 @@ var PrivateTeacher = model.Experience{
 	Qualifications: []model.ExperienceQualification{
 		{Type: model.UniStudent, Major: []string{"Education", "Computer Science"}, Duration: 0},
 	},
-	ApplyExperience: func(pastExperiences []model.TakenExperience, stat *model.Stats) bool {
+	ApplyExperience: func(pastExperiences []model.TakenExperience, stat *model.Stats, char *model.Character) bool {
 		for _, exp := range pastExperiences {
 			if exp.Type == model.UniStudent && (exp.Major == "Education" || exp.Major == "Computer Science") {
-				stat.Confidence += 5
+				char.Confidence.Current += 5
 				return true
 			}
 		}

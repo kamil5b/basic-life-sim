@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	MVPTitleMenu = `
+	mvpTitleMenu = `
 BASIC LIFE SIMULATOR
 
 1. New Game
@@ -15,17 +15,17 @@ BASIC LIFE SIMULATOR
 3. Exit
 `
 
-	MVPMainMenu = `
+	mvpMainMenu = `
 =============================================
 ================= MAIN MENU =================
 =============================================
 Money: %.2f $
 Needs:
-	- Food       [%d/%d] %d
-	- Energy     [%d/%d] %d
-	- Hygiene    [%d/%d] %d
-	- Confidence [%d/%d] %d
-	- Strength   [%d/%d] %d
+	- Food       [%d/%d] %d%%
+	- Energy     [%d/%d] %d%%
+	- Hygiene    [%d/%d] %d%%
+	- Confidence [%d/%d] %d%%
+	- Strength   [%d/%d] %d%%
 
 Actions:
 1. Check Room
@@ -36,56 +36,86 @@ Actions:
 `
 )
 
-func mainMenu(char model.Character) {
-	fmt.Printf(MVPMainMenu,
-		char.CurrentStats.Money,
-		char.CurrentStats.Food, char.MaxFood, char.CurrentStats.Food*100/char.MaxFood,
-		char.CurrentStats.Energy, char.MaxEnergy, char.CurrentStats.Energy*100/char.MaxEnergy,
-		char.CurrentStats.Hygiene, char.MaxHygiene, char.CurrentStats.Hygiene*100/char.MaxHygiene,
-		char.CurrentStats.Confidence, char.MaxConfidence, char.CurrentStats.Confidence*100/char.MaxConfidence,
-		char.CurrentStats.Strength, char.MaxStrength, char.CurrentStats.Strength*100/char.MaxStrength,
-	)
-	var choice int
-	fmt.Scanln(&choice)
+func needPct(need model.NeedStat) uint16 {
+	if need.Max == 0 {
+		return 0
+	}
+	return need.Current * 100 / need.Max
+}
 
-	switch choice {
-	case 1:
-		fmt.Println("Checking room...")
-		// Implement room checking logic here
-	case 2:
-		fmt.Println("Doing activity...")
-		// Implement activity logic here
-	case 3:
-		fmt.Println("Buying item...")
-		// Implement item purchasing logic here
-	case 4:
-		fmt.Println("Saving game...")
-		// Implement game saving logic here
-	case 5:
-		fmt.Println("Exiting game. Goodbye!")
-		return
-	default:
-		fmt.Println("Invalid choice. Please try again.")
-		mainMenu(char) // Restart the menu on invalid input
+func printHomeLayout(h model.HomeType) {
+	fmt.Println("===========================================")
+	fmt.Println("Home Type:", h.Name)
+	fmt.Println("Max Height:", h.MaxHeight)
+	fmt.Println("Shared Bathroom:", h.SharedBathroom)
+	fmt.Println("Shared Kitchen:", h.SharedKitchen)
+	fmt.Printf("Upfront Cost: $%.2f\n", h.UpfrontCost)
+	fmt.Printf("Monthly Cost: $%.2f\n", h.MonthlyCost)
+	fmt.Println("Layout:")
+	for _, row := range h.Layout {
+		for _, cell := range row {
+			switch cell {
+			case model.HomeCellWall:
+				fmt.Print("█")
+			case model.HomeCellFloor:
+				fmt.Print(" ")
+			case model.HomeCellDoor:
+				fmt.Print("D")
+			default:
+				fmt.Print("?")
+			}
+		}
+		fmt.Println()
+	}
+	fmt.Println("===========================================")
+}
+
+func mainMenu(char *model.Character) {
+	for {
+		fmt.Printf(mvpMainMenu,
+			char.CurrentStats.Money,
+			char.Food.Current, char.Food.Max, needPct(char.Food),
+			char.Energy.Current, char.Energy.Max, needPct(char.Energy),
+			char.Hygiene.Current, char.Hygiene.Max, needPct(char.Hygiene),
+			char.Confidence.Current, char.Confidence.Max, needPct(char.Confidence),
+			char.Strength.Current, char.Strength.Max, needPct(char.Strength),
+		)
+
+		var choice int
+		fmt.Scanln(&choice)
+
+		switch choice {
+		case 1:
+			fmt.Println("Checking room...")
+			// Implement room checking logic here
+		case 2:
+			fmt.Println("Doing activity...")
+			// Implement activity logic here
+		case 3:
+			fmt.Println("Buying item...")
+			// Implement item purchasing logic here
+		case 4:
+			fmt.Println("Saving game...")
+			// Implement game saving logic here
+		case 5:
+			fmt.Println("Exiting game. Goodbye!")
+			return
+		default:
+			fmt.Println("Invalid choice. Please try again.")
+		}
 	}
 }
 
 func newGame() (model.Character, error) {
-	// Initialize character with default values
 	char := model.Character{
-		Age:           18,
-		MaxFood:       50,
-		MaxEnergy:     50,
-		MaxHygiene:    50,
-		MaxConfidence: 50,
-		MaxStrength:   50,
+		Age:        18,
+		Food:       model.NeedStat{Current: 50, Max: 50},
+		Energy:     model.NeedStat{Current: 50, Max: 50},
+		Hygiene:    model.NeedStat{Current: 50, Max: 50},
+		Confidence: model.NeedStat{Current: 50, Max: 50},
+		Strength:   model.NeedStat{Current: 50, Max: 50},
 		CurrentStats: model.Stats{
-			Money:      3000,
-			Food:       50,
-			Energy:     50,
-			Hygiene:    50,
-			Confidence: 50,
-			Strength:   50,
+			Money: 3000,
 		},
 	}
 
@@ -95,14 +125,19 @@ func newGame() (model.Character, error) {
 	fmt.Println("Are you a male or female (M/F)?")
 	var gender string
 	fmt.Scanln(&gender)
-	if gender == "M" || gender == "m" {
+	switch gender {
+	case "M", "m":
 		char.IsMale = true
+	case "F", "f":
+		char.IsMale = false
+	default:
+		return char, fmt.Errorf("invalid gender choice: %q — expected M or F", gender)
 	}
 
 	fmt.Println("Choose your home:")
 	for i, home := range constant.Level1HomeTypes {
 		fmt.Printf("%d. %s\n", i+1, home.Name)
-		home.PrintLayout()
+		printHomeLayout(home)
 	}
 	var chooseHome int
 	fmt.Scanln(&chooseHome)
@@ -118,30 +153,30 @@ func newGame() (model.Character, error) {
 }
 
 func RunMVP() {
-	var char model.Character
-	var err error
-	fmt.Println(MVPTitleMenu)
-	var choice int
-	fmt.Scanln(&choice)
+	for {
+		fmt.Println(mvpTitleMenu)
+		var choice int
+		fmt.Scanln(&choice)
 
-	switch choice {
-	case 1:
-		fmt.Println("Starting a new game...")
-		char, err = newGame()
-		if err != nil {
-			fmt.Println("Error creating character:", err)
+		switch choice {
+		case 1:
+			fmt.Println("Starting a new game...")
+			char, err := newGame()
+			if err != nil {
+				fmt.Println("Error creating character:", err)
+				return
+			}
+			mainMenu(&char)
 			return
+		case 2:
+			fmt.Println("Loading game...")
+			// Load game state here
+			return
+		case 3:
+			fmt.Println("Exiting game. Goodbye!")
+			return
+		default:
+			fmt.Println("Invalid choice. Please try again.")
 		}
-		mainMenu(char)
-		// Initialize game state here
-	case 2:
-		fmt.Println("Loading game...")
-		// Load game state here
-	case 3:
-		fmt.Println("Exiting game. Goodbye!")
-		return
-	default:
-		fmt.Println("Invalid choice. Please try again.")
-		RunMVP() // Restart the menu on invalid input
 	}
 }

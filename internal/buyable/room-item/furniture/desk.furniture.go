@@ -4,32 +4,32 @@ import "basic-life-sim/internal/model"
 
 var BasicDesk = model.RoomItem{
 	Name:          "Basic Desk",
-	Type:          "Furniture",
-	Category:      "Low",
+	Type:          model.RoomItemFurniture,
+	Category:      model.CategoryLow,
 	WillBlockPath: true,
 	Width:         2, Length: 1, Height: 2,
 	BasePrice: 80,
-	DoAction: func(input string, stat *model.Stats) {
+	DoAction: func(input string, stat *model.Stats, char *model.Character) {
 		switch input {
 		case "study":
-			stat.Confidence = safeAdd(stat.Confidence, 5)
+			char.Confidence.Current = safeAdd(char.Confidence.Current, 5)
 		}
 	},
 }
 
 var ComputerDesk = model.RoomItem{
 	Name:          "Computer Desk",
-	Type:          "Furniture",
-	Category:      "Medium-High",
+	Type:          model.RoomItemFurniture,
+	Category:      model.CategoryMediumHigh,
 	WillBlockPath: true,
 	Width:         2, Length: 1, Height: 2,
 	BasePrice: 300,
-	DoAction: func(input string, stat *model.Stats) {
+	DoAction: func(input string, stat *model.Stats, char *model.Character) {
 		switch input {
 		case "study":
-			stat.Confidence = safeAdd(stat.Confidence, 8)
+			char.Confidence.Current = safeAdd(char.Confidence.Current, 8)
 		case "work":
-			stat.Confidence = safeAdd(stat.Confidence, 10)
+			char.Confidence.Current = safeAdd(char.Confidence.Current, 10)
 		}
 	},
 }

@@ -11,14 +11,14 @@ var SoftwareEngineer = model.Experience{
 		{Type: model.UniStudent, Major: []string{"Computer Science"}, Duration: 0},
 		{Type: model.PartTimer, Major: []string{"Computer Science"}, Duration: 6},
 	},
-	ApplyExperience: func(pastExperiences []model.TakenExperience, stat *model.Stats) bool {
+	ApplyExperience: func(pastExperiences []model.TakenExperience, stat *model.Stats, char *model.Character) bool {
 		for _, exp := range pastExperiences {
 			if exp.Type == model.UniStudent && exp.Major == "Computer Science" {
-				stat.Confidence += 15
+				char.Confidence.Current += 15
 				return true
 			}
 			if exp.Type == model.PartTimer && exp.Major == "Computer Science" {
-				stat.Confidence += 15
+				char.Confidence.Current += 15
 				return true
 			}
 		}
@@ -35,14 +35,14 @@ var SchoolTeacher = model.Experience{
 		{Type: model.UniStudent, Major: []string{"Education"}, Duration: 0},
 		{Type: model.PartTimer, Major: []string{"Education"}, Duration: 6},
 	},
-	ApplyExperience: func(pastExperiences []model.TakenExperience, stat *model.Stats) bool {
+	ApplyExperience: func(pastExperiences []model.TakenExperience, stat *model.Stats, char *model.Character) bool {
 		for _, exp := range pastExperiences {
 			if exp.Type == model.UniStudent && exp.Major == "Education" {
-				stat.Confidence += 15
+				char.Confidence.Current += 15
 				return true
 			}
 			if exp.Type == model.PartTimer && exp.Major == "Education" {
-				stat.Confidence += 15
+				char.Confidence.Current += 15
 				return true
 			}
 		}
@@ -56,8 +56,8 @@ var Retailer = model.Experience{
 	Type:           model.FullTimer,
 	Major:          "Working Class",
 	Qualifications: []model.ExperienceQualification{},
-	ApplyExperience: func(pastExperiences []model.TakenExperience, stat *model.Stats) bool {
-		stat.Confidence += 5
+	ApplyExperience: func(pastExperiences []model.TakenExperience, stat *model.Stats, char *model.Character) bool {
+		char.Confidence.Current += 5
 		return true
 	},
 }

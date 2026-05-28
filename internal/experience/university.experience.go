@@ -8,8 +8,8 @@ var ComputerScienceUniversity = model.Experience{
 	Type:           model.UniStudent,
 	Major:          "Computer Science",
 	Qualifications: []model.ExperienceQualification{},
-	ApplyExperience: func(pastExperiences []model.TakenExperience, stat *model.Stats) bool {
-		stat.Confidence += 10
+	ApplyExperience: func(pastExperiences []model.TakenExperience, stat *model.Stats, char *model.Character) bool {
+		char.Confidence.Current += 10
 		return true
 	},
 }
@@ -20,8 +20,8 @@ var EducationUniversity = model.Experience{
 	Type:           model.UniStudent,
 	Major:          "Education",
 	Qualifications: []model.ExperienceQualification{},
-	ApplyExperience: func(pastExperiences []model.TakenExperience, stat *model.Stats) bool {
-		stat.Confidence += 10
+	ApplyExperience: func(pastExperiences []model.TakenExperience, stat *model.Stats, char *model.Character) bool {
+		char.Confidence.Current += 10
 		return true
 	},
 }

@@ -4,31 +4,31 @@ import "basic-life-sim/internal/model"
 
 var BasicSink = model.RoomItem{
 	Name:          "Basic Sink",
-	Type:          "Hygiene",
-	Category:      "Low",
+	Type:          model.RoomItemHygiene,
+	Category:      model.CategoryLow,
 	WillBlockPath: true,
 	Width:         1, Length: 1, Height: 1,
 	BasePrice: 50,
-	DoAction: func(input string, stat *model.Stats) {
+	DoAction: func(input string, stat *model.Stats, char *model.Character) {
 		switch input {
 		case "wash":
-			stat.Hygiene = safeAdd(stat.Hygiene, 10)
+			char.Hygiene.Current = safeAdd(char.Hygiene.Current, 10)
 		}
 	},
 }
 
 var VanitySink = model.RoomItem{
 	Name:          "Vanity Sink",
-	Type:          "Hygiene",
-	Category:      "Medium",
+	Type:          model.RoomItemHygiene,
+	Category:      model.CategoryMedium,
 	WillBlockPath: true,
 	Width:         1, Length: 1, Height: 1,
 	BasePrice: 180,
-	DoAction: func(input string, stat *model.Stats) {
+	DoAction: func(input string, stat *model.Stats, char *model.Character) {
 		switch input {
 		case "wash":
-			stat.Hygiene = safeAdd(stat.Hygiene, 15)
-			stat.Confidence = safeAdd(stat.Confidence, 3)
+			char.Hygiene.Current = safeAdd(char.Hygiene.Current, 15)
+			char.Confidence.Current = safeAdd(char.Confidence.Current, 3)
 		}
 	},
 }
