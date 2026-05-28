@@ -19,7 +19,7 @@ const (
 	=============================================
 	================= MAIN MENU =================
 	=============================================
-		Money: %d $
+		Money: %f.2%% $
 		Needs:
 			- Food       [%d/%d] %d
 			- Energy     [%d/%d] %d
@@ -35,6 +35,17 @@ const (
 		5. Exit Game
 	`
 )
+
+func mainMenu(char model.Character) {
+	fmt.Printf(MVPMainMenu,
+		char.CurrentStats.Money,
+		char.CurrentStats.Food, char.MaxFood, char.CurrentStats.Food*100/char.MaxFood,
+		char.CurrentStats.Energy, char.MaxEnergy, char.CurrentStats.Energy*100/char.MaxEnergy,
+		char.CurrentStats.Hygiene, char.MaxHygiene, char.CurrentStats.Hygiene*100/char.MaxHygiene,
+		char.CurrentStats.Confidence, char.MaxConfidence, char.CurrentStats.Confidence*100/char.MaxConfidence,
+		char.CurrentStats.Strength, char.MaxStrength, char.CurrentStats.Strength*100/char.MaxStrength,
+	)
+}
 
 func newGame() (model.Character, error) {
 	// Initialize character with default values
@@ -69,6 +80,14 @@ func newGame() (model.Character, error) {
 	for i, home := range constant.Level1HomeTypes {
 		fmt.Printf("%d. %s\n", i+1, home.Name)
 		home.PrintLayout()
+	}
+	var chooseHome int
+	fmt.Scanln(&chooseHome)
+	if chooseHome < 1 || chooseHome > len(constant.Level1HomeTypes) {
+		return char, fmt.Errorf("invalid home choice")
+	}
+	char.CurrentHome = model.Home{
+		Type: constant.Level1HomeTypes[chooseHome-1],
 	}
 
 	return char, nil
