@@ -86,14 +86,12 @@ func mainMenu(char *model.Character) {
 
 		switch choice {
 		case 1:
-			fmt.Println("Checking room...")
-			// Implement room checking logic here
+			checkRoomMenu(char)
 		case 2:
 			fmt.Println("Doing activity...")
 			// Implement activity logic here
 		case 3:
-			fmt.Println("Buying item...")
-			// Implement item purchasing logic here
+			buyItemMenu(char)
 		case 4:
 			fmt.Println("Saving game...")
 			// Implement game saving logic here

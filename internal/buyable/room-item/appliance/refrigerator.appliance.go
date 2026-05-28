@@ -9,6 +9,7 @@ var MiniRefrigerator = model.RoomItem{
 	WillBlockPath: true,
 	Width:         1, Length: 1, Height: 2,
 	BasePrice: 120,
+	Actions:   []string{"eat"},
 	DoAction: func(input string, stat *model.Stats, char *model.Character) {
 		switch input {
 		case "eat":
@@ -24,6 +25,7 @@ var StandardRefrigerator = model.RoomItem{
 	WillBlockPath: true,
 	Width:         1, Length: 2, Height: 2,
 	BasePrice: 350,
+	Actions:   []string{"eat"},
 	DoAction: func(input string, stat *model.Stats, char *model.Character) {
 		switch input {
 		case "eat":

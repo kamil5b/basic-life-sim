@@ -75,6 +75,7 @@ type RoomItem struct {
 	WillBlockPath         bool
 	Width, Length, Height uint8
 	BasePrice             float64
+	Actions               []string // available action verbs passed to DoAction
 	DoAction              func(input string, stat *Stats, char *Character)
 }
 

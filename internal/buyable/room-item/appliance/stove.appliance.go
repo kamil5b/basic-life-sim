@@ -9,6 +9,7 @@ var SingleBurnerStove = model.RoomItem{
 	WillBlockPath: true,
 	Width:         1, Length: 1, Height: 1,
 	BasePrice: 40,
+	Actions:   []string{"cook"},
 	DoAction: func(input string, stat *model.Stats, char *model.Character) {
 		switch input {
 		case "cook":
@@ -25,6 +26,7 @@ var GasStove = model.RoomItem{
 	WillBlockPath: true,
 	Width:         2, Length: 1, Height: 1,
 	BasePrice: 200,
+	Actions:   []string{"cook"},
 	DoAction: func(input string, stat *model.Stats, char *model.Character) {
 		switch input {
 		case "cook":

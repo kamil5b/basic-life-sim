@@ -9,6 +9,7 @@ var SmallTV = model.RoomItem{
 	WillBlockPath: true,
 	Width:         2, Length: 1, Height: 1,
 	BasePrice: 100,
+	Actions:   []string{"watch"},
 	DoAction: func(input string, stat *model.Stats, char *model.Character) {
 		switch input {
 		case "watch":
@@ -25,6 +26,7 @@ var SmartTV = model.RoomItem{
 	WillBlockPath: true,
 	Width:         3, Length: 1, Height: 1,
 	BasePrice: 500,
+	Actions:   []string{"watch", "stream"},
 	DoAction: func(input string, stat *model.Stats, char *model.Character) {
 		switch input {
 		case "watch":

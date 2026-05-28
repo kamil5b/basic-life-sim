@@ -9,6 +9,7 @@ var BasicShower = model.RoomItem{
 	WillBlockPath: true,
 	Width:         1, Length: 1, Height: 2,
 	BasePrice: 150,
+	Actions:   []string{"shower"},
 	DoAction: func(input string, stat *model.Stats, char *model.Character) {
 		switch input {
 		case "shower":
@@ -25,6 +26,7 @@ var PremiumShower = model.RoomItem{
 	WillBlockPath: true,
 	Width:         1, Length: 1, Height: 2,
 	BasePrice: 600,
+	Actions:   []string{"shower"},
 	DoAction: func(input string, stat *model.Stats, char *model.Character) {
 		switch input {
 		case "shower":

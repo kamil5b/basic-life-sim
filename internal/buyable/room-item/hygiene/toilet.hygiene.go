@@ -9,6 +9,7 @@ var BasicToilet = model.RoomItem{
 	WillBlockPath: true,
 	Width:         1, Length: 1, Height: 1,
 	BasePrice: 60,
+	Actions:   []string{"use"},
 	DoAction: func(input string, stat *model.Stats, char *model.Character) {
 		switch input {
 		case "use":
@@ -24,6 +25,7 @@ var BidetToilet = model.RoomItem{
 	WillBlockPath: true,
 	Width:         1, Length: 1, Height: 1,
 	BasePrice: 400,
+	Actions:   []string{"use"},
 	DoAction: func(input string, stat *model.Stats, char *model.Character) {
 		switch input {
 		case "use":

@@ -9,6 +9,7 @@ var SingleBed = model.RoomItem{
 	WillBlockPath: true,
 	Width:         1, Length: 2, Height: 1,
 	BasePrice: 150,
+	Actions:   []string{"sleep"},
 	DoAction: func(input string, stat *model.Stats, char *model.Character) {
 		switch input {
 		case "sleep":
@@ -24,6 +25,7 @@ var QueenBed = model.RoomItem{
 	WillBlockPath: true,
 	Width:         2, Length: 2, Height: 1,
 	BasePrice: 350,
+	Actions:   []string{"sleep"},
 	DoAction: func(input string, stat *model.Stats, char *model.Character) {
 		switch input {
 		case "sleep":
@@ -39,6 +41,7 @@ var KingBed = model.RoomItem{
 	WillBlockPath: true,
 	Width:         2, Length: 2, Height: 1,
 	BasePrice: 700,
+	Actions:   []string{"sleep"},
 	DoAction: func(input string, stat *model.Stats, char *model.Character) {
 		switch input {
 		case "sleep":

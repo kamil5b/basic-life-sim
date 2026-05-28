@@ -9,6 +9,7 @@ var BasicChair = model.RoomItem{
 	WillBlockPath: false,
 	Width:         1, Length: 1, Height: 1,
 	BasePrice: 30,
+	Actions:   []string{"sit"},
 	DoAction: func(input string, stat *model.Stats, char *model.Character) {
 		switch input {
 		case "sit":
@@ -24,6 +25,7 @@ var GamingChair = model.RoomItem{
 	WillBlockPath: false,
 	Width:         1, Length: 1, Height: 1,
 	BasePrice: 250,
+	Actions:   []string{"sit"},
 	DoAction: func(input string, stat *model.Stats, char *model.Character) {
 		switch input {
 		case "sit":

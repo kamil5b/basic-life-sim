@@ -9,6 +9,7 @@ var BasicSink = model.RoomItem{
 	WillBlockPath: true,
 	Width:         1, Length: 1, Height: 1,
 	BasePrice: 50,
+	Actions:   []string{"wash"},
 	DoAction: func(input string, stat *model.Stats, char *model.Character) {
 		switch input {
 		case "wash":
@@ -24,6 +25,7 @@ var VanitySink = model.RoomItem{
 	WillBlockPath: true,
 	Width:         1, Length: 1, Height: 1,
 	BasePrice: 180,
+	Actions:   []string{"wash"},
 	DoAction: func(input string, stat *model.Stats, char *model.Character) {
 		switch input {
 		case "wash":
