@@ -8,14 +8,11 @@ var SingleBurnerStove = model.RoomItem{
 	Category:      model.CategoryLow,
 	WillBlockPath: true,
 	Width:         1, Length: 1, Height: 1,
-	BasePrice: 40,
-	Actions:   []string{"cook"},
+	BasePrice:   40,
+	CookSurface: &model.CookCapacity{Slots: 1},
+	Actions:     []string{"place food", "cook", "take out"},
 	DoAction: func(input string, stat *model.Stats, char *model.Character) {
-		switch input {
-		case "cook":
-			char.Food.Current = safeAdd(char.Food.Current, 30)
-			char.Energy.Current = safeSub(char.Energy.Current, 5)
-		}
+		// "place food", "cook", "take out" are handled by cookSurfaceAction in core
 	},
 }
 
@@ -25,13 +22,10 @@ var GasStove = model.RoomItem{
 	Category:      model.CategoryMedium,
 	WillBlockPath: true,
 	Width:         2, Length: 1, Height: 1,
-	BasePrice: 200,
-	Actions:   []string{"cook"},
+	BasePrice:   200,
+	CookSurface: &model.CookCapacity{Slots: 4},
+	Actions:     []string{"place food", "cook", "take out"},
 	DoAction: func(input string, stat *model.Stats, char *model.Character) {
-		switch input {
-		case "cook":
-			char.Food.Current = safeAdd(char.Food.Current, 40)
-			char.Energy.Current = safeSub(char.Energy.Current, 5)
-		}
+		// "place food", "cook", "take out" are handled by cookSurfaceAction in core
 	},
 }

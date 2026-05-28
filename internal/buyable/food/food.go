@@ -2,6 +2,76 @@ package food
 
 import "basic-life-sim/internal/model"
 
+// --- Cooked results (defined first so raw foods can reference them) ---
+
+var CookedEgg = model.Food{
+	Name:      "Cooked Egg",
+	Type:      "cooked protein",
+	BasePrice: 0,
+	Width:     1, Length: 1, Height: 1,
+	BaseExpiryDays: 2,
+	UsesTotal:      1,
+	Temperature:    70,
+	CanBeCooked:    false,
+	CanBeMixed:     true,
+	EatAction: func(stat *model.Stats, char *model.Character) {
+		char.Food.Current = safeAdd(char.Food.Current, 12)
+		char.Energy.Current = safeAdd(char.Energy.Current, 5)
+	},
+}
+
+var CookedChickenBreast = model.Food{
+	Name:      "Cooked Chicken Breast",
+	Type:      "cooked protein",
+	BasePrice: 0,
+	Width:     1, Length: 2, Height: 1,
+	BaseExpiryDays: 4,
+	UsesTotal:      2,
+	Temperature:    75,
+	CanBeCooked:    false,
+	CanBeMixed:     false,
+	EatAction: func(stat *model.Stats, char *model.Character) {
+		char.Food.Current = safeAdd(char.Food.Current, 20)
+		char.Strength.Current = safeAdd(char.Strength.Current, 5)
+		char.Energy.Current = safeAdd(char.Energy.Current, 8)
+	},
+}
+
+var CookedRice = model.Food{
+	Name:      "Cooked Rice",
+	Type:      "cooked carb",
+	BasePrice: 0,
+	Width:     1, Length: 1, Height: 2,
+	BaseExpiryDays: 3,
+	UsesTotal:      6,
+	Temperature:    80,
+	CanBeCooked:    false,
+	CanBeMixed:     true,
+	EatAction: func(stat *model.Stats, char *model.Character) {
+		char.Food.Current = safeAdd(char.Food.Current, 25)
+		char.Energy.Current = safeAdd(char.Energy.Current, 10)
+	},
+}
+
+var CookedBroccoli = model.Food{
+	Name:      "Cooked Broccoli",
+	Type:      "cooked vegetable",
+	BasePrice: 0,
+	Width:     1, Length: 1, Height: 2,
+	BaseExpiryDays: 3,
+	UsesTotal:      2,
+	Temperature:    70,
+	CanBeCooked:    false,
+	CanBeMixed:     true,
+	EatAction: func(stat *model.Stats, char *model.Character) {
+		char.Food.Current = safeAdd(char.Food.Current, 12)
+		char.Confidence.Current = safeAdd(char.Confidence.Current, 3)
+		char.Energy.Current = safeAdd(char.Energy.Current, 4)
+	},
+}
+
+// --- Raw foods ---
+
 var Egg = model.Food{
 	Name:      "Egg",
 	Type:      "raw protein",
@@ -12,6 +82,7 @@ var Egg = model.Food{
 	Temperature:    4,
 	CanBeCooked:    true,
 	CanBeMixed:     true,
+	CookedResult:   &CookedEgg,
 	EatAction: func(stat *model.Stats, char *model.Character) {
 		char.Food.Current = safeAdd(char.Food.Current, 5)
 	},
@@ -27,10 +98,8 @@ var ChickenBreast = model.Food{
 	Temperature:    4,
 	CanBeCooked:    true,
 	CanBeMixed:     false,
-	EatAction: func(stat *model.Stats, char *model.Character) {
-		char.Food.Current = safeAdd(char.Food.Current, 8)
-		char.Strength.Current = safeAdd(char.Strength.Current, 2)
-	},
+	CookedResult:   &CookedChickenBreast,
+	// raw chicken is unsafe to eat — EatAction is nil (penalises stats)
 }
 
 var Apple = model.Food{
@@ -75,9 +144,8 @@ var Rice = model.Food{
 	Temperature:    20,
 	CanBeCooked:    true,
 	CanBeMixed:     true,
-	EatAction: func(stat *model.Stats, char *model.Character) {
-		char.Food.Current = safeAdd(char.Food.Current, 10)
-	},
+	CookedResult:   &CookedRice,
+	// raw rice is inedible
 }
 
 var Broccoli = model.Food{
@@ -90,6 +158,7 @@ var Broccoli = model.Food{
 	Temperature:    4,
 	CanBeCooked:    true,
 	CanBeMixed:     true,
+	CookedResult:   &CookedBroccoli,
 	EatAction: func(stat *model.Stats, char *model.Character) {
 		char.Food.Current = safeAdd(char.Food.Current, 5)
 		char.Confidence.Current = safeAdd(char.Confidence.Current, 1)

@@ -218,6 +218,12 @@ func doItemAction(placed *model.PlacedRoomItem, char *model.Character) {
 		return
 	}
 
+	// cooking surface actions delegate to cookSurfaceAction
+	if placed.Item.CookSurface != nil {
+		cookSurfaceAction(placed, char, action)
+		return
+	}
+
 	placed.Item.DoAction(action, &char.CurrentStats, char)
 	fmt.Printf("You %s using %s.\n", action, placed.Item.Name)
 }

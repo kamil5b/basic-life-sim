@@ -107,6 +107,11 @@ func (s StorageCapacity) MultiplierAt(x, y, z uint8) float32 {
 	return best
 }
 
+// CookCapacity describes a cooking appliance's surface — how many food items it can hold at once.
+type CookCapacity struct {
+	Slots uint8 // max number of food items on the surface simultaneously
+}
+
 type RoomItem struct {
 	Name                  string
 	Type                  RoomItemType
@@ -114,7 +119,8 @@ type RoomItem struct {
 	WillBlockPath         bool
 	Width, Length, Height uint8
 	BasePrice             float64
-	Storage               *StorageCapacity // non-nil for items that can store food
+	Storage               *StorageCapacity // non-nil for items that can store food (fridge)
+	CookSurface           *CookCapacity    // non-nil for items that can cook food (stove, microwave)
 	Actions               []string         // available action verbs passed to DoAction
 	DoAction              func(input string, stat *Stats, char *Character)
 }
@@ -128,13 +134,22 @@ type StoredFood struct {
 	Food                Food
 }
 
+// SurfaceFood is a food item resting on a cooking appliance surface (placed there by the player).
+type SurfaceFood struct {
+	PurchaseDate  CompactDate
+	UsesRemaining uint8
+	Cooked        bool // true once the cook action has been applied
+	Food          Food
+}
+
 type PlacedRoomItem struct {
 	X         uint8
 	Y         uint8
 	Z         uint8
 	Direction Direction
 	Item      RoomItem
-	Stored    []StoredFood // food stored inside this item (only used when Item.Storage != nil)
+	Stored    []StoredFood  // food stored inside (fridge)
+	OnSurface []SurfaceFood // food resting on the surface (stove/microwave)
 }
 
 // PlacedFood is a food item sitting directly in the room (not inside a fridge).
