@@ -8,32 +8,32 @@ import (
 
 const (
 	MVPTitleMenu = `
-		BASIC LIFE SIMULATOR
+BASIC LIFE SIMULATOR
 
-		1. New Game
-		2. Load Game
-		3. Exit
-	`
+1. New Game
+2. Load Game
+3. Exit
+`
 
 	MVPMainMenu = `
-	=============================================
-	================= MAIN MENU =================
-	=============================================
-		Money: %f.2%% $
-		Needs:
-			- Food       [%d/%d] %d
-			- Energy     [%d/%d] %d
-			- Hygiene    [%d/%d] %d
-			- Confidence [%d/%d] %d
-			- Strength   [%d/%d] %d
+=============================================
+================= MAIN MENU =================
+=============================================
+Money: %.2f $
+Needs:
+	- Food       [%d/%d] %d
+	- Energy     [%d/%d] %d
+	- Hygiene    [%d/%d] %d
+	- Confidence [%d/%d] %d
+	- Strength   [%d/%d] %d
 
-		Actions:
-		1. Check Room
-		2. Do Activity
-		3. Buy Item
-		4. Save Game
-		5. Exit Game
-	`
+Actions:
+1. Check Room
+2. Do Activity
+3. Buy Item
+4. Save Game
+5. Exit Game
+`
 )
 
 func mainMenu(char model.Character) {
@@ -45,6 +45,29 @@ func mainMenu(char model.Character) {
 		char.CurrentStats.Confidence, char.MaxConfidence, char.CurrentStats.Confidence*100/char.MaxConfidence,
 		char.CurrentStats.Strength, char.MaxStrength, char.CurrentStats.Strength*100/char.MaxStrength,
 	)
+	var choice int
+	fmt.Scanln(&choice)
+
+	switch choice {
+	case 1:
+		fmt.Println("Checking room...")
+		// Implement room checking logic here
+	case 2:
+		fmt.Println("Doing activity...")
+		// Implement activity logic here
+	case 3:
+		fmt.Println("Buying item...")
+		// Implement item purchasing logic here
+	case 4:
+		fmt.Println("Saving game...")
+		// Implement game saving logic here
+	case 5:
+		fmt.Println("Exiting game. Goodbye!")
+		return
+	default:
+		fmt.Println("Invalid choice. Please try again.")
+		mainMenu(char) // Restart the menu on invalid input
+	}
 }
 
 func newGame() (model.Character, error) {
@@ -86,6 +109,7 @@ func newGame() (model.Character, error) {
 	if chooseHome < 1 || chooseHome > len(constant.Level1HomeTypes) {
 		return char, fmt.Errorf("invalid home choice")
 	}
+	char.CurrentStats.Money -= constant.Level1HomeTypes[chooseHome-1].UpfrontCost
 	char.CurrentHome = model.Home{
 		Type: constant.Level1HomeTypes[chooseHome-1],
 	}
@@ -108,7 +132,7 @@ func RunMVP() {
 			fmt.Println("Error creating character:", err)
 			return
 		}
-		fmt.Println(char)
+		mainMenu(char)
 		// Initialize game state here
 	case 2:
 		fmt.Println("Loading game...")
