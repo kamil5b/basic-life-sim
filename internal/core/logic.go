@@ -113,8 +113,11 @@ func canPlace(home model.Home, item model.RoomItem, x, y, z uint8, dir model.Dir
 				}
 			}
 		}
-		// Clearance check: the new item must not land in the 1-cell clearance
-		// zone in front of any already-placed item.
+		// Clearance check: only applies when the already-placed item needs clearance
+		// AND the new item also needs clearance.
+		if !placed.Item.NeedClearance || !item.NeedClearance {
+			continue
+		}
 		sdx, sdy := dirStepXY(placed.Direction)
 		placedSet := make(map[[2]uint8]bool, len(existingCells))
 		for _, c := range existingCells {

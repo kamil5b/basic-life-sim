@@ -118,6 +118,7 @@ type RoomItem struct {
 	Category              RoomItemCategory
 	WillBlockPath         bool
 	CanOverhang           bool // if true, item may be placed at z>0 without requiring support below
+	NeedClearance         bool // if true, requires 1 free cell in front; if false, can be placed flush against other items
 	Width, Length, Height uint8
 	BasePrice             float64
 	Storage               *StorageCapacity // non-nil for items that can store food (fridge)

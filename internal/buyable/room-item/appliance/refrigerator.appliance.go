@@ -7,6 +7,7 @@ var MiniRefrigerator = model.RoomItem{
 	Type:          model.RoomItemAppliance,
 	Category:      model.CategoryLow,
 	WillBlockPath: true,
+	NeedClearance: true,
 	Width:         1, Length: 1, Height: 2,
 	BasePrice: 120,
 	// 2x2x3 = 12 slots; uniform 3x expiry, no cold zone
@@ -25,6 +26,7 @@ var StandardRefrigerator = model.RoomItem{
 	Type:          model.RoomItemAppliance,
 	Category:      model.CategoryMedium,
 	WillBlockPath: true,
+	NeedClearance: true,
 	Width:         1, Length: 2, Height: 2,
 	BasePrice: 350,
 	// 3x3x4 = 36 slots; base 3x expiry everywhere.

@@ -283,6 +283,9 @@ func (p *shopPanel) dirFacesWall(dir model.Direction) bool {
 		if layout[n1y][n1x] == model.HomeCellWall {
 			return true // wall directly in front — can't access
 		}
+		if !p.pendingItem.NeedClearance {
+			continue // no clearance required — only wall/OOB blocks this direction
+		}
 		if occupied[[2]uint8{uint8(n1x), uint8(n1y)}] {
 			return true // another item immediately in front blocks access
 		}
