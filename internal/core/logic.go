@@ -53,8 +53,17 @@ func canPlaceOnGrid(home model.Home, item model.RoomItem, x, y uint8) error {
 				valid = false
 				break
 			}
-			if layout[cy][cx] != model.HomeCellFloor && layout[cy][cx] != model.HomeCellDoor {
+			switch layout[cy][cx] {
+			case model.HomeCellFloor:
+				// ok
+			case model.HomeCellDoor:
+				if item.Height > 0 {
+					valid = false
+				}
+			default:
 				valid = false
+			}
+			if !valid {
 				break
 			}
 		}

@@ -189,8 +189,18 @@ func (w *placementWizard) update() bool {
 	// cancel button always available
 	cx2, cy2, cw, ch := spCancelBtnRect()
 	if clicked && isHovered(mx, my, cx2, cy2, cw, ch) {
-		w.onCancel()
-		return true
+		switch w.curStep {
+		case pwStepGrid:
+			w.onCancel()
+			return true
+		case pwStepZ:
+			w.curStep = pwStepGrid
+			w.err = ""
+		case pwStepDir:
+			w.curStep = pwStepZ
+			w.err = ""
+		}
+		return false
 	}
 
 	switch w.curStep {
