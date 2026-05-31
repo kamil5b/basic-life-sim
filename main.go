@@ -1,7 +1,12 @@
 package main
 
-import "basic-life-sim/internal/core"
+import (
+	"basic-life-sim/internal/core"
+	"log"
+)
 
 func main() {
-	core.RunMVP()
+	if err := core.Run(); err != nil {
+		log.Fatal(err)
+	}
 }
