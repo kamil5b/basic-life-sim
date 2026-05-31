@@ -58,11 +58,57 @@ func canPlaceOnGrid(home model.Home, item model.RoomItem, x, y uint8) error {
 				break
 			}
 		}
-		if valid {
-			// Also check item-vs-item clearance at z=0 for this direction.
-			if err := canPlace(home, item, x, y, 0, dir); err == nil {
-				return nil // at least one direction fully works
+		if !valid {
+			continue
+		}
+		// Check direct footprint overlap with existing items.
+		newCells := occupiedCells(x, y, item, dir)
+		newCellSet := make(map[[2]uint8]bool, len(newCells))
+		for _, c := range newCells {
+			newCellSet[c] = true
+		}
+		blocked := false
+		for _, placed := range home.RoomItems {
+			if !zRangeOverlaps(0, item.Height, placed.Z, placed.Item.Height) {
+				continue
 			}
+			// Direct overlap.
+			for _, ec := range occupiedCells(placed.X, placed.Y, placed.Item, placed.Direction) {
+				if newCellSet[ec] {
+					blocked = true
+					break
+				}
+			}
+			if blocked {
+				break
+			}
+			// Clearance zone of existing item.
+			if !placed.Item.NeedClearance {
+				continue
+			}
+			sdx, sdy := dirStepXY(placed.Direction)
+			existingCells := occupiedCells(placed.X, placed.Y, placed.Item, placed.Direction)
+			placedSet := make(map[[2]uint8]bool, len(existingCells))
+			for _, c := range existingCells {
+				placedSet[c] = true
+			}
+			for _, ec := range existingCells {
+				front := [2]uint8{uint8(int(ec[0]) + sdx), uint8(int(ec[1]) + sdy)}
+				if placedSet[front] {
+					continue
+				}
+				c1 := [2]uint8{uint8(int(ec[0]) + sdx), uint8(int(ec[1]) + sdy)}
+				if newCellSet[c1] {
+					blocked = true
+					break
+				}
+			}
+			if blocked {
+				break
+			}
+		}
+		if !blocked {
+			return nil
 		}
 	}
 	return fmt.Errorf("no valid placement at (%d,%d): blocked by walls or nearby items", x, y)
@@ -115,7 +161,7 @@ func canPlace(home model.Home, item model.RoomItem, x, y, z uint8, dir model.Dir
 		}
 		// Clearance check: only applies when the already-placed item needs clearance
 		// AND the new item also needs clearance.
-		if !placed.Item.NeedClearance || !item.NeedClearance {
+		if !placed.Item.NeedClearance {
 			continue
 		}
 		sdx, sdy := dirStepXY(placed.Direction)
@@ -129,14 +175,10 @@ func canPlace(home model.Home, item model.RoomItem, x, y, z uint8, dir model.Dir
 			if placedSet[front] {
 				continue // not a front-edge cell
 			}
-			// The immediate cell in front and the cell one beyond are reserved.
+			// The immediate cell in front is reserved.
 			clear1 := [2]uint8{uint8(int(ec[0]) + sdx), uint8(int(ec[1]) + sdy)}
-			clear2 := [2]uint8{uint8(int(ec[0]) + 2*sdx), uint8(int(ec[1]) + 2*sdy)}
 			if newCellSet[clear1] {
 				return fmt.Errorf("position (%d,%d) is in the clearance zone in front of %s", clear1[0], clear1[1], placed.Item.Name)
-			}
-			if newCellSet[clear2] {
-				return fmt.Errorf("position (%d,%d) is in the clearance zone in front of %s", clear2[0], clear2[1], placed.Item.Name)
 			}
 		}
 	}

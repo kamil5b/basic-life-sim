@@ -175,12 +175,7 @@ func (w *placementWizard) dirFacesWall(dir model.Direction) bool {
 		if occupied[[2]uint8{uint8(n1x), uint8(n1y)}] {
 			return true
 		}
-		n2x, n2y := n1x+stepX, n1y+stepY
-		if n2x >= 0 && n2y >= 0 && n2y < rows && n2x < cols {
-			if occupied[[2]uint8{uint8(n2x), uint8(n2y)}] {
-				return true
-			}
-		}
+
 	}
 	return false
 }
