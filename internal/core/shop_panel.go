@@ -102,11 +102,13 @@ func (p *shopPanel) update() {
 		if p.wizard != nil {
 			// wizard owns cancel + all 3 steps for items
 			p.wizard.update()
-			switch p.wizard.step() {
-			case pwStepZ:
-				p.mode = spModePlaceZ
-			case pwStepDir:
-				p.mode = spModePlaceDir
+			if p.wizard != nil {
+				switch p.wizard.step() {
+				case pwStepZ:
+					p.mode = spModePlaceZ
+				case pwStepDir:
+					p.mode = spModePlaceDir
+				}
 			}
 			return
 		}

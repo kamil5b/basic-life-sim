@@ -166,11 +166,13 @@ func (p *roomPanel) update() {
 	case rpModeMoveGrid, rpModeMoveZ, rpModeMoveDir:
 		if p.wizard != nil {
 			p.wizard.update()
-			switch p.wizard.step() {
-			case pwStepZ:
-				p.mode = rpModeMoveZ
-			case pwStepDir:
-				p.mode = rpModeMoveDir
+			if p.wizard != nil {
+				switch p.wizard.step() {
+				case pwStepZ:
+					p.mode = rpModeMoveZ
+				case pwStepDir:
+					p.mode = rpModeMoveDir
+				}
 			}
 		}
 	}
