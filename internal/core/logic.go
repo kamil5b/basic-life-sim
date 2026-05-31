@@ -33,6 +33,36 @@ func zRangeOverlaps(az, aHeight, bz, bHeight uint8) bool {
 	return az <= bTop && bz <= aTop
 }
 
+// doorClearanceCells returns all floor cells that are 1 step inward from a door.
+// For each door cell, any floor neighbor is an inward direction — that neighbor
+// cell is the clearance cell that must stay free.
+func doorClearanceCells(layout model.HomeLayout) map[[2]uint8]bool {
+	rows := len(layout)
+	if rows == 0 {
+		return nil
+	}
+	cols := len(layout[0])
+	clearance := make(map[[2]uint8]bool)
+	steps := [][2]int{{0, -1}, {0, 1}, {1, 0}, {-1, 0}}
+	for r := 0; r < rows; r++ {
+		for c := 0; c < cols; c++ {
+			if layout[r][c] != model.HomeCellDoor {
+				continue
+			}
+			for _, s := range steps {
+				nr, nc := r+s[0], c+s[1]
+				if nr < 0 || nr >= rows || nc < 0 || nc >= cols {
+					continue
+				}
+				if layout[nr][nc] == model.HomeCellFloor {
+					clearance[[2]uint8{uint8(nc), uint8(nr)}] = true
+				}
+			}
+		}
+	}
+	return clearance
+}
+
 // canPlaceOnGrid checks only layout bounds and floor-tile validity for all
 // possible directions a pending item could face when anchored at (x, y).
 // It does NOT check Z or item-vs-item clearance — those are verified later.
@@ -44,6 +74,7 @@ func canPlaceOnGrid(home model.Home, item model.RoomItem, x, y uint8) error {
 		return fmt.Errorf("empty layout")
 	}
 	cols := uint8(len(layout[0]))
+	doorClear := doorClearanceCells(layout)
 	dirs := []model.Direction{model.North, model.East, model.South, model.West}
 	for _, dir := range dirs {
 		valid := true
@@ -114,6 +145,15 @@ func canPlaceOnGrid(home model.Home, item model.RoomItem, x, y uint8) error {
 			}
 			if blocked {
 				break
+			}
+		}
+		if !blocked {
+			// Check door clearance.
+			for c := range newCellSet {
+				if doorClear[c] {
+					blocked = true
+					break
+				}
 			}
 		}
 		if !blocked {
@@ -189,6 +229,13 @@ func canPlace(home model.Home, item model.RoomItem, x, y, z uint8, dir model.Dir
 			if newCellSet[clear1] {
 				return fmt.Errorf("position (%d,%d) is in the clearance zone in front of %s", clear1[0], clear1[1], placed.Item.Name)
 			}
+		}
+	}
+	// Door clearance check.
+	doorClear := doorClearanceCells(layout)
+	for _, cell := range newCells {
+		if doorClear[cell] {
+			return fmt.Errorf("position (%d,%d) blocks door clearance", cell[0], cell[1])
 		}
 	}
 	return nil
