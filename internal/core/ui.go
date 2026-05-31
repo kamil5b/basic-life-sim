@@ -1,6 +1,7 @@
 package core
 
 import (
+	"basic-life-sim/internal/model"
 	"fmt"
 	"image/color"
 	"strings"
@@ -136,4 +137,48 @@ func listRow(dst *ebiten.Image, label string, idx, selIdx int, x, y, w, rowH flo
 	strokeRect(dst, x, y, w, rowH, colorBorder)
 	drawText(dst, label, float64(x)+8, float64(y)+float64(rowH)/2-7, fnt, colorText)
 	return hov
+}
+
+// drawFacingArrow draws a small yellow directional triangle inside a grid cell
+// centred at grid coordinate (hx, hy) with cell size rpCellSz.
+// ox, oy are the pixel origin of the grid.
+func drawFacingArrow(dst *ebiten.Image, ox, oy float32, hx, hy int, dir model.Direction) {
+	cx := ox + float32(hx)*rpCellSz + rpCellSz/2
+	cy := oy + float32(hy)*rpCellSz + rpCellSz/2
+	const arm = float32(8)
+	var tipx, tipy, ax, ay, bx2, by2 float32
+	switch dir {
+	case model.North:
+		tipx, tipy = cx, cy-arm
+		ax, ay = cx-arm/2, cy+arm/2
+		bx2, by2 = cx+arm/2, cy+arm/2
+	case model.South:
+		tipx, tipy = cx, cy+arm
+		ax, ay = cx-arm/2, cy-arm/2
+		bx2, by2 = cx+arm/2, cy-arm/2
+	case model.East:
+		tipx, tipy = cx+arm, cy
+		ax, ay = cx-arm/2, cy-arm/2
+		bx2, by2 = cx-arm/2, cy+arm/2
+	case model.West:
+		tipx, tipy = cx-arm, cy
+		ax, ay = cx+arm/2, cy-arm/2
+		bx2, by2 = cx+arm/2, cy+arm/2
+	}
+	verts := []ebiten.Vertex{
+		{DstX: tipx, DstY: tipy, SrcX: 0, SrcY: 0, ColorR: 1, ColorG: 0.9, ColorB: 0, ColorA: 1},
+		{DstX: ax, DstY: ay, SrcX: 0, SrcY: 0, ColorR: 1, ColorG: 0.9, ColorB: 0, ColorA: 1},
+		{DstX: bx2, DstY: by2, SrcX: 0, SrcY: 0, ColorR: 1, ColorG: 0.9, ColorB: 0, ColorA: 1},
+	}
+	dst.DrawTriangles(verts, []uint16{0, 1, 2}, whitePixel(), &ebiten.DrawTrianglesOptions{})
+}
+
+var _whitePixel *ebiten.Image
+
+func whitePixel() *ebiten.Image {
+	if _whitePixel == nil {
+		_whitePixel = ebiten.NewImage(1, 1)
+		_whitePixel.Fill(color.White)
+	}
+	return _whitePixel
 }

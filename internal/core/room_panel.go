@@ -324,11 +324,13 @@ func (p *roomPanel) drawRoomGrid(dst *ebiten.Image) {
 			cy := oy + float32(cell[1])*rpCellSz
 			fillRect(dst, cx+1, cy+1, rpCellSz-3, rpCellSz-3, colorItem)
 		}
-		// label first letter
+		// first letter in top-left of anchor cell
 		lx := ox + float32(placed.X)*rpCellSz + 4
 		ly := oy + float32(placed.Y)*rpCellSz + 4
 		label := string([]rune(placed.Item.Name)[0:1])
 		drawText(dst, label, float64(lx), float64(ly), fontS, colorBg)
+		// facing arrow in anchor cell
+		drawFacingArrow(dst, ox, oy, int(placed.X), int(placed.Y), placed.Direction)
 	}
 
 	// overlay floor food

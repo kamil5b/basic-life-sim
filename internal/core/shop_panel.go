@@ -45,7 +45,8 @@ type shopPanel struct {
 	placeX      uint8
 	placeY      uint8
 	placeZ      uint8
-	hoverX      int // grid cell under cursor (-1 = none)
+	placeDir    model.Direction // tracked during dir mode for ghost preview
+	hoverX      int             // grid cell under cursor (-1 = none)
 	hoverY      int
 	placeErr    string
 }
@@ -164,9 +165,16 @@ func (p *shopPanel) update() {
 		dirs := []model.Direction{model.North, model.East, model.South, model.West}
 		for i, d := range dirs {
 			bx, by, bw, bh := spDirBtnRect(i)
+			if isHovered(mx, my, bx, by, bw, bh) {
+				p.placeDir = d // live preview on hover
+			}
 			if clicked && isHovered(mx, my, bx, by, bw, bh) {
-				p.finalizeItemPlace(d)
-				return
+				if !p.dirFacesWall(d) {
+					p.finalizeItemPlace(d)
+					return
+				} else {
+					p.placeErr = "Can't face a wall — pick another direction."
+				}
 			}
 		}
 	}
@@ -202,10 +210,96 @@ func (p *shopPanel) cancelPlace() {
 	p.pendingItem = nil
 	p.pendingFood = nil
 	p.placeZ = 0
+	p.placeDir = model.North
 	p.placeErr = ""
 	p.hoverX, p.hoverY = -1, -1
 	p.mode = spModeCatalog
 	p.main.setMessage("Placement cancelled.")
+}
+
+// dirFacesWall returns true if placing pendingItem at (placeX, placeY) facing dir
+// is invalid because the item's front edge is blocked or has insufficient clearance.
+//
+// Rules (checked for every front-edge cell of the footprint):
+//  1. The immediate neighbor in dir must not be a wall, OOB, or another room item.
+//  2. The cell one further beyond that neighbor must not be another room item
+//     (ensures at least 1 free block of clearance in front).
+func (p *shopPanel) dirFacesWall(dir model.Direction) bool {
+	if p.pendingItem == nil {
+		return false
+	}
+	home := p.char.CurrentHome
+	layout := home.Type.Layout
+	rows := len(layout)
+	if rows == 0 {
+		return false
+	}
+	cols := len(layout[0])
+
+	// Build a set of all cells occupied by already-placed room items.
+	occupied := make(map[[2]uint8]bool)
+	for _, placed := range home.RoomItems {
+		for _, cell := range occupiedCells(placed.X, placed.Y, placed.Item, placed.Direction) {
+			occupied[cell] = true
+		}
+	}
+
+	// step returns the (dx,dy) unit vector for dir.
+	stepX, stepY := dirStep(dir)
+
+	// Determine the front-edge cells: cells of the footprint that have no other
+	// footprint cell further ahead of them in the facing direction.
+	allCells := occupiedCells(p.placeX, p.placeY, *p.pendingItem, dir)
+	footprintSet := make(map[[2]uint8]bool, len(allCells))
+	for _, c := range allCells {
+		footprintSet[c] = true
+	}
+
+	for _, cell := range allCells {
+		cx, cy := int(cell[0]), int(cell[1])
+		// Only process front-edge cells: the cell directly ahead must not also
+		// be part of this item's footprint.
+		aheadInFootprint := footprintSet[[2]uint8{uint8(cx + stepX), uint8(cy + stepY)}]
+		if aheadInFootprint {
+			continue // interior cell — skip
+		}
+
+		// ── Neighbor 1: directly in front ────────────────────────────────────
+		n1x, n1y := cx+stepX, cy+stepY
+		if n1x < 0 || n1y < 0 || n1y >= rows || n1x >= cols {
+			return true // OOB
+		}
+		if layout[n1y][n1x] == model.HomeCellWall {
+			return true // wall immediately in front
+		}
+		if occupied[[2]uint8{uint8(n1x), uint8(n1y)}] {
+			return true // another item immediately in front
+		}
+
+		// ── Neighbor 2: one more step (clearance check) ───────────────────────
+		n2x, n2y := n1x+stepX, n1y+stepY
+		if n2x >= 0 && n2y >= 0 && n2y < rows && n2x < cols {
+			if occupied[[2]uint8{uint8(n2x), uint8(n2y)}] {
+				return true // another item within 1-block clearance
+			}
+		}
+	}
+	return false
+}
+
+// dirStep returns the (dx, dy) unit step for a cardinal direction.
+func dirStep(dir model.Direction) (dx, dy int) {
+	switch dir {
+	case model.North:
+		return 0, -1
+	case model.South:
+		return 0, 1
+	case model.East:
+		return 1, 0
+	case model.West:
+		return -1, 0
+	}
+	return 0, 0
 }
 
 // maxPlaceZ returns the highest valid Z for the pending item given the room's max height.
@@ -345,12 +439,12 @@ func spCancelBtnRect() (x, y, w, h float32) {
 
 var dirBtnLabels = []string{"↑ N", "→ E", "↓ S", "← W"}
 
-// Z column visualiser constants
+// Z column visualiser — drawn inside the left panel area (panelX+4 to panelX+spListW)
 const (
-	zCellW = float32(40)
-	zCellH = float32(34)
-	zColX  = panelX + 4
-	zColY  = panelY + 50 // top of the column (z = maxHeight-1 drawn first = top)
+	zCellW = float32(48)
+	zCellH = float32(38)
+	zColX  = panelX + 60 // inset from left panel edge
+	zColY  = panelY + 60 // below the title
 )
 
 func spZCellRect(zLevel, maxHeight int) (x, y, w, h float32) {
@@ -360,16 +454,17 @@ func spZCellRect(zLevel, maxHeight int) (x, y, w, h float32) {
 }
 
 func spZConfirmBtnRect() (x, y, w, h float32) {
-	return panelX + 4, float32(ScreenH) - 60, 160, 38
+	// below the Z column, in left panel
+	return panelX + 60, float32(ScreenH) - 80, 180, 38
 }
 
 func spDirBtnRect(i int) (x, y, w, h float32) {
-	w, h = 80, 40
-	// 2×2 grid centred under the catalog list
+	// 2×2 grid inside left panel
+	w, h = 88, 44
 	col := float32(i % 2)
 	row := float32(i / 2)
-	x = panelX + 4 + col*(w+8)
-	y = float32(ScreenH) - 120 + row*(h+8)
+	x = panelX + 20 + col*(w+8)
+	y = panelY + 120 + row*(h+10)
 	return
 }
 
@@ -394,23 +489,20 @@ func (p *shopPanel) visibleCatalogLen() int {
 func (p *shopPanel) draw(dst *ebiten.Image) {
 	mx, my := ebiten.CursorPosition()
 
-	// ── left side: catalog list (always visible) ──────────────────────────────
-	p.drawCatalog(dst, mx, my)
-
-	// ── right side: room grid (always visible) ────────────────────────────────
-	p.drawPlacementGrid(dst, mx, my)
-
-	// ── overlay for Z picker ────────────────────────────────────────────────
-	if p.mode == spModePlaceZ {
+	// Left panel: catalog in catalog/grid mode; Z picker or dir picker replaces it
+	switch p.mode {
+	case spModeCatalog, spModePlaceGrid:
+		p.drawCatalog(dst, mx, my)
+	case spModePlaceZ:
 		p.drawZPicker(dst, mx, my)
-	}
-
-	// ── overlay for direction picker ──────────────────────────────────────────
-	if p.mode == spModePlaceDir {
+	case spModePlaceDir:
 		p.drawDirPicker(dst, mx, my)
 	}
 
-	// cancel button when in placement mode
+	// Right panel: room grid always visible
+	p.drawPlacementGrid(dst, mx, my)
+
+	// Cancel button in placement modes (top-right of left panel)
 	if p.mode == spModePlaceGrid || p.mode == spModePlaceZ || p.mode == spModePlaceDir {
 		cx2, cy2, cw, ch := spCancelBtnRect()
 		drawButton(dst, "✕ Cancel", cx2, cy2, cw, ch, fontS, isHovered(mx, my, cx2, cy2, cw, ch), true)
@@ -522,11 +614,13 @@ func (p *shopPanel) drawPlacementGrid(dst *ebiten.Image, mx, my int) {
 	cols := len(layout[0])
 
 	// header
-	label := "Room — click a floor cell to place"
+	label := "Step 1: Click a floor cell to place"
 	if p.mode == spModeCatalog {
 		label = "Room"
+	} else if p.mode == spModePlaceZ {
+		label = fmt.Sprintf("Placing at (%d,%d) — pick Z on the left", p.placeX, p.placeY)
 	} else if p.mode == spModePlaceDir {
-		label = "Choose direction below"
+		label = fmt.Sprintf("Placing at (%d,%d) z=%d — pick direction on the left", p.placeX, p.placeY, p.placeZ)
 	}
 	drawText(dst, label, float64(ox), float64(oy)-18, fontS, colorMuted)
 
@@ -567,36 +661,41 @@ func (p *shopPanel) drawPlacementGrid(dst *ebiten.Image, mx, my int) {
 	}
 
 	// placement mode: highlight hover + show ghost footprint
-	if p.mode == spModePlaceGrid || p.mode == spModePlaceDir {
+	if p.mode == spModePlaceGrid || p.mode == spModePlaceZ || p.mode == spModePlaceDir {
 		hx, hy := p.hoverX, p.hoverY
-		// in dir mode, show the chosen cell as fixed
-		if p.mode == spModePlaceDir {
+		// in Z/Dir mode, show the chosen cell as fixed
+		if p.mode == spModePlaceZ || p.mode == spModePlaceDir {
 			hx, hy = int(p.placeX), int(p.placeY)
 		}
 
-		if hx >= 0 {
-			// ghost footprint for pending item (north dir preview)
-			if p.pendingItem != nil {
-				cols2, rows2 := itemFootprint(*p.pendingItem, model.North)
-				for dr := uint8(0); dr < rows2; dr++ {
-					for dc := uint8(0); dc < cols2; dc++ {
-						cx := ox + float32(hx+int(dc))*rpCellSz
-						cy := oy + float32(hy+int(dr))*rpCellSz
-						fillRect(dst, cx+1, cy+1, rpCellSz-3, rpCellSz-3,
-							color.RGBA{100, 200, 100, 120})
-					}
-				}
-			} else {
-				// food: single cell highlight
-				cx := ox + float32(hx)*rpCellSz
-				cy := oy + float32(hy)*rpCellSz
-				fillRect(dst, cx+1, cy+1, rpCellSz-3, rpCellSz-3,
-					color.RGBA{100, 200, 100, 120})
+		if hx >= 0 && p.pendingItem != nil {
+			// Use current placeDir for ghost in dir mode, North otherwise
+			ghostDir := model.North
+			if p.mode == spModePlaceDir {
+				ghostDir = p.placeDir
 			}
+			gCols, gRows := itemFootprint(*p.pendingItem, ghostDir)
+			for dr := uint8(0); dr < gRows; dr++ {
+				for dc := uint8(0); dc < gCols; dc++ {
+					gcx := ox + float32(hx+int(dc))*rpCellSz
+					gcy := oy + float32(hy+int(dr))*rpCellSz
+					fillRect(dst, gcx+1, gcy+1, rpCellSz-3, rpCellSz-3,
+						color.RGBA{100, 200, 100, 120})
+				}
+			}
+			// Draw facing arrow in the anchor cell (hx, hy)
+			if p.mode == spModePlaceDir {
+				drawFacingArrow(dst, ox, oy, hx, hy, ghostDir)
+			}
+		} else if hx >= 0 && p.pendingFood != nil {
+			// food: single cell highlight
+			gcx := ox + float32(hx)*rpCellSz
+			gcy := oy + float32(hy)*rpCellSz
+			fillRect(dst, gcx+1, gcy+1, rpCellSz-3, rpCellSz-3,
+				color.RGBA{100, 200, 100, 120})
 		}
 
-		// error message
-		if p.placeErr != "" {
+		if p.placeErr != "" && p.mode == spModePlaceGrid {
 			drawText(dst, p.placeErr, float64(ox), float64(oy)+float64(float32(rows)*rpCellSz)+6, fontS, colorRed)
 		}
 	}
@@ -622,8 +721,11 @@ func (p *shopPanel) drawZPicker(dst *ebiten.Image, mx, my int) {
 	canOverhang := p.pendingItem.CanOverhang
 	selZ := int(p.placeZ)
 
-	// title
-	drawText(dst, "Pick height (Z):", float64(zColX), float64(zColY)-20, fontS, colorText)
+	// header in left-panel area
+	lx := float64(panelX) + 20
+	drawText(dst, "Step 2: Pick height (Z)", lx, float64(panelY)+16, fontS, colorMuted)
+	drawText(dst, p.pendingItem.Name, lx, float64(panelY)+40, fontM, colorAccent)
+	drawText(dst, fmt.Sprintf("pos (%d,%d)", p.placeX, p.placeY), lx, float64(panelY)+66, fontS, colorMuted)
 
 	// right-side label column origin
 	labelX := float64(zColX) + float64(zCellW) + 8
@@ -708,9 +810,31 @@ func (p *shopPanel) drawZPicker(dst *ebiten.Image, mx, my int) {
 }
 
 func (p *shopPanel) drawDirPicker(dst *ebiten.Image, mx, my int) {
-	drawText(dst, fmt.Sprintf("Which way is it facing?  (z=%d)", p.placeZ), float64(panelX)+4, float64(ScreenH)-140, fontS, colorText)
-	for i, lbl := range dirBtnLabels {
+	if p.pendingItem == nil {
+		return
+	}
+	lx := float64(panelX) + 20
+
+	drawText(dst, "Step 3: Choose facing direction", lx, float64(panelY)+16, fontS, colorMuted)
+	drawText(dst, p.pendingItem.Name, lx, float64(panelY)+40, fontM, colorAccent)
+	drawText(dst, fmt.Sprintf("pos (%d,%d)  z=%d", p.placeX, p.placeY, p.placeZ), lx, float64(panelY)+66, fontS, colorMuted)
+	drawText(dst, "Direction must not face a wall.", lx, float64(panelY)+88, fontS, colorText)
+
+	dirs := []model.Direction{model.North, model.East, model.South, model.West}
+	for i, d := range dirs {
 		bx, by, bw, bh := spDirBtnRect(i)
-		drawButton(dst, lbl, bx, by, bw, bh, fontM, isHovered(mx, my, bx, by, bw, bh), true)
+		blocked := p.dirFacesWall(d)
+		hov := isHovered(mx, my, bx, by, bw, bh) && !blocked
+		drawButton(dst, dirBtnLabels[i], bx, by, bw, bh, fontM, hov, !blocked)
+		if blocked {
+			// small "wall" label under blocked button
+			drawText(dst, "wall", float64(bx)+float64(bw)/2-10, float64(by+bh)+2, fontS, colorRed)
+		}
+	}
+
+	if p.placeErr != "" {
+		drawTextWrapped(dst, p.placeErr,
+			float64(panelX)+20, float64(panelY)+240,
+			float64(spListW)-24, 18, fontS, colorRed)
 	}
 }
