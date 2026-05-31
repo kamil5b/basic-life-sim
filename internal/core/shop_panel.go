@@ -122,6 +122,10 @@ func (p *shopPanel) update() {
 					// food: no direction needed — place immediately
 					p.finalizeFoodPlace()
 				} else {
+					if err := canPlaceOnGrid(p.char.CurrentHome, *p.pendingItem, p.placeX, p.placeY); err != nil {
+						p.placeErr = err.Error()
+						return
+					}
 					p.mode = spModePlaceZ
 				}
 			}
@@ -151,6 +155,7 @@ func (p *shopPanel) update() {
 			// confirm button
 			zbx, zby, zbw, zbh := spZConfirmBtnRect()
 			if isHovered(mx, my, zbx, zby, zbw, zbh) {
+				p.placeErr = ""
 				p.mode = spModePlaceDir
 			}
 		}
@@ -166,7 +171,8 @@ func (p *shopPanel) update() {
 		for i, d := range dirs {
 			bx, by, bw, bh := spDirBtnRect(i)
 			if isHovered(mx, my, bx, by, bw, bh) {
-				p.placeDir = d // live preview on hover
+				p.placeDir = d
+				p.placeErr = ""
 			}
 			if clicked && isHovered(mx, my, bx, by, bw, bh) {
 				if !p.dirFacesWall(d) {
@@ -236,6 +242,17 @@ func (p *shopPanel) dirFacesWall(dir model.Direction) bool {
 	}
 	cols := len(layout[0])
 
+	// First: reject if the footprint for this direction goes off floor tiles.
+	for _, cell := range occupiedCells(p.placeX, p.placeY, *p.pendingItem, dir) {
+		cx, cy := int(cell[0]), int(cell[1])
+		if cy < 0 || cy >= rows || cx < 0 || cx >= cols {
+			return true
+		}
+		if layout[cy][cx] != model.HomeCellFloor && layout[cy][cx] != model.HomeCellDoor {
+			return true
+		}
+	}
+
 	// Build a set of all cells occupied by already-placed room items.
 	occupied := make(map[[2]uint8]bool)
 	for _, placed := range home.RoomItems {
@@ -244,11 +261,8 @@ func (p *shopPanel) dirFacesWall(dir model.Direction) bool {
 		}
 	}
 
-	// step returns the (dx,dy) unit vector for dir.
 	stepX, stepY := dirStep(dir)
 
-	// Determine the front-edge cells: cells of the footprint that have no other
-	// footprint cell further ahead of them in the facing direction.
 	allCells := occupiedCells(p.placeX, p.placeY, *p.pendingItem, dir)
 	footprintSet := make(map[[2]uint8]bool, len(allCells))
 	for _, c := range allCells {
@@ -257,30 +271,26 @@ func (p *shopPanel) dirFacesWall(dir model.Direction) bool {
 
 	for _, cell := range allCells {
 		cx, cy := int(cell[0]), int(cell[1])
-		// Only process front-edge cells: the cell directly ahead must not also
-		// be part of this item's footprint.
 		aheadInFootprint := footprintSet[[2]uint8{uint8(cx + stepX), uint8(cy + stepY)}]
 		if aheadInFootprint {
-			continue // interior cell — skip
+			continue
 		}
 
-		// ── Neighbor 1: directly in front ────────────────────────────────────
 		n1x, n1y := cx+stepX, cy+stepY
 		if n1x < 0 || n1y < 0 || n1y >= rows || n1x >= cols {
-			return true // OOB
+			return true // OOB — no space in front
 		}
 		if layout[n1y][n1x] == model.HomeCellWall {
-			return true // wall immediately in front
+			return true // wall directly in front — can't access
 		}
 		if occupied[[2]uint8{uint8(n1x), uint8(n1y)}] {
-			return true // another item immediately in front
+			return true // another item immediately in front blocks access
 		}
 
-		// ── Neighbor 2: one more step (clearance check) ───────────────────────
 		n2x, n2y := n1x+stepX, n1y+stepY
 		if n2x >= 0 && n2y >= 0 && n2y < rows && n2x < cols {
 			if occupied[[2]uint8{uint8(n2x), uint8(n2y)}] {
-				return true // another item within 1-block clearance
+				return true
 			}
 		}
 	}
@@ -288,19 +298,7 @@ func (p *shopPanel) dirFacesWall(dir model.Direction) bool {
 }
 
 // dirStep returns the (dx, dy) unit step for a cardinal direction.
-func dirStep(dir model.Direction) (dx, dy int) {
-	switch dir {
-	case model.North:
-		return 0, -1
-	case model.South:
-		return 0, 1
-	case model.East:
-		return 1, 0
-	case model.West:
-		return -1, 0
-	}
-	return 0, 0
-}
+func dirStep(dir model.Direction) (dx, dy int) { return dirStepXY(dir) }
 
 // maxPlaceZ returns the highest valid Z for the pending item given the room's max height.
 func (p *shopPanel) maxPlaceZ() uint8 {
@@ -669,10 +667,20 @@ func (p *shopPanel) drawPlacementGrid(dst *ebiten.Image, mx, my int) {
 		}
 
 		if hx >= 0 && p.pendingItem != nil {
-			// Use current placeDir for ghost in dir mode, North otherwise
 			ghostDir := model.North
 			if p.mode == spModePlaceDir {
 				ghostDir = p.placeDir
+			} else {
+				// Pick the first direction whose footprint fits on floor tiles at the hover cell.
+				savedX, savedY := p.placeX, p.placeY
+				p.placeX, p.placeY = uint8(hx), uint8(hy)
+				for _, d := range []model.Direction{model.North, model.East, model.South, model.West} {
+					if !p.dirFacesWall(d) {
+						ghostDir = d
+						break
+					}
+				}
+				p.placeX, p.placeY = savedX, savedY
 			}
 			gCols, gRows := itemFootprint(*p.pendingItem, ghostDir)
 			for dr := uint8(0); dr < gRows; dr++ {
@@ -695,7 +703,7 @@ func (p *shopPanel) drawPlacementGrid(dst *ebiten.Image, mx, my int) {
 				color.RGBA{100, 200, 100, 120})
 		}
 
-		if p.placeErr != "" && p.mode == spModePlaceGrid {
+		if p.placeErr != "" {
 			drawText(dst, p.placeErr, float64(ox), float64(oy)+float64(float32(rows)*rpCellSz)+6, fontS, colorRed)
 		}
 	}
@@ -818,7 +826,6 @@ func (p *shopPanel) drawDirPicker(dst *ebiten.Image, mx, my int) {
 	drawText(dst, "Step 3: Choose facing direction", lx, float64(panelY)+16, fontS, colorMuted)
 	drawText(dst, p.pendingItem.Name, lx, float64(panelY)+40, fontM, colorAccent)
 	drawText(dst, fmt.Sprintf("pos (%d,%d)  z=%d", p.placeX, p.placeY, p.placeZ), lx, float64(panelY)+66, fontS, colorMuted)
-	drawText(dst, "Direction must not face a wall.", lx, float64(panelY)+88, fontS, colorText)
 
 	dirs := []model.Direction{model.North, model.East, model.South, model.West}
 	for i, d := range dirs {

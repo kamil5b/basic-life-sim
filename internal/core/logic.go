@@ -33,6 +33,41 @@ func zRangeOverlaps(az, aHeight, bz, bHeight uint8) bool {
 	return az <= bTop && bz <= aTop
 }
 
+// canPlaceOnGrid checks only layout bounds and floor-tile validity for all
+// possible directions a pending item could face when anchored at (x, y).
+// It does NOT check Z or item-vs-item clearance — those are verified later.
+// Returns an error if no direction would produce a valid footprint.
+func canPlaceOnGrid(home model.Home, item model.RoomItem, x, y uint8) error {
+	layout := home.Type.Layout
+	rows := uint8(len(layout))
+	if rows == 0 {
+		return fmt.Errorf("empty layout")
+	}
+	cols := uint8(len(layout[0]))
+	dirs := []model.Direction{model.North, model.East, model.South, model.West}
+	for _, dir := range dirs {
+		valid := true
+		for _, cell := range occupiedCells(x, y, item, dir) {
+			cx, cy := cell[0], cell[1]
+			if cy >= rows || cx >= cols {
+				valid = false
+				break
+			}
+			if layout[cy][cx] != model.HomeCellFloor && layout[cy][cx] != model.HomeCellDoor {
+				valid = false
+				break
+			}
+		}
+		if valid {
+			// Also check item-vs-item clearance at z=0 for this direction.
+			if err := canPlace(home, item, x, y, 0, dir); err == nil {
+				return nil // at least one direction fully works
+			}
+		}
+	}
+	return fmt.Errorf("no valid placement at (%d,%d): blocked by walls or nearby items", x, y)
+}
+
 func canPlace(home model.Home, item model.RoomItem, x, y, z uint8, dir model.Direction) error {
 	layout := home.Type.Layout
 	rows := uint8(len(layout))
@@ -59,19 +94,65 @@ func canPlace(home model.Home, item model.RoomItem, x, y, z uint8, dir model.Dir
 			return fmt.Errorf("position (%d,%d) is not a floor tile", cx, cy)
 		}
 	}
+	newCells := occupiedCells(x, y, item, dir)
+	newCellSet := make(map[[2]uint8]bool, len(newCells))
+	for _, c := range newCells {
+		newCellSet[c] = true
+	}
+
 	for _, placed := range home.RoomItems {
 		if !zRangeOverlaps(z, item.Height, placed.Z, placed.Item.Height) {
 			continue
 		}
-		for _, existing := range occupiedCells(placed.X, placed.Y, placed.Item, placed.Direction) {
-			for _, cell := range occupiedCells(x, y, item, dir) {
+		existingCells := occupiedCells(placed.X, placed.Y, placed.Item, placed.Direction)
+		// Direct overlap check.
+		for _, existing := range existingCells {
+			for _, cell := range newCells {
 				if existing == cell {
 					return fmt.Errorf("position (%d,%d) occupied by %s", cell[0], cell[1], placed.Item.Name)
 				}
 			}
 		}
+		// Clearance check: the new item must not land in the 1-cell clearance
+		// zone in front of any already-placed item.
+		sdx, sdy := dirStepXY(placed.Direction)
+		placedSet := make(map[[2]uint8]bool, len(existingCells))
+		for _, c := range existingCells {
+			placedSet[c] = true
+		}
+		for _, ec := range existingCells {
+			// Only front-edge cells of the placed item.
+			front := [2]uint8{uint8(int(ec[0]) + sdx), uint8(int(ec[1]) + sdy)}
+			if placedSet[front] {
+				continue // not a front-edge cell
+			}
+			// The immediate cell in front and the cell one beyond are reserved.
+			clear1 := [2]uint8{uint8(int(ec[0]) + sdx), uint8(int(ec[1]) + sdy)}
+			clear2 := [2]uint8{uint8(int(ec[0]) + 2*sdx), uint8(int(ec[1]) + 2*sdy)}
+			if newCellSet[clear1] {
+				return fmt.Errorf("position (%d,%d) is in the clearance zone in front of %s", clear1[0], clear1[1], placed.Item.Name)
+			}
+			if newCellSet[clear2] {
+				return fmt.Errorf("position (%d,%d) is in the clearance zone in front of %s", clear2[0], clear2[1], placed.Item.Name)
+			}
+		}
 	}
 	return nil
+}
+
+// dirStepXY returns the (dx, dy) unit step for a cardinal direction.
+func dirStepXY(dir model.Direction) (dx, dy int) {
+	switch dir {
+	case model.North:
+		return 0, -1
+	case model.South:
+		return 0, 1
+	case model.East:
+		return 1, 0
+	case model.West:
+		return -1, 0
+	}
+	return 0, 0
 }
 
 // ── fridge slot helpers ──────────────────────────────────────────────────────
