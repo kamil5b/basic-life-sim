@@ -649,6 +649,7 @@ func (p *shopPanel) drawPlacementGrid(dst *ebiten.Image, mx, my int) {
 		lx := ox + float32(placed.X)*rpCellSz + 4
 		ly := oy + float32(placed.Y)*rpCellSz + 4
 		drawText(dst, string([]rune(placed.Item.Name)[0:1]), float64(lx), float64(ly), fontS, colorBg)
+		drawFacingArrow(dst, ox, oy, int(placed.X), int(placed.Y), placed.Direction)
 	}
 
 	// floor food overlay
