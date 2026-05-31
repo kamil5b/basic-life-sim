@@ -22,14 +22,8 @@ type roomPanel struct {
 	selItem int // index into RoomItems, -1 = none
 	selAct  int
 
-	mode    rpMode
-	moveErr string
-
-	// move state (mirrors shop placement flow)
-	moveX   uint8
-	moveY   uint8
-	moveZ   uint8
-	moveDir model.Direction
+	mode   rpMode
+	wizard *placementWizard
 }
 
 type rpMode int
@@ -148,11 +142,15 @@ func (p *roomPanel) update() {
 		// move button
 		mbx, mby, mbw, mbh := rpMoveBtnRect()
 		if clicked && isHovered(mx, my, mbx, mby, mbw, mbh) {
-			p.moveX = placed.X
-			p.moveY = placed.Y
-			p.moveZ = placed.Z
-			p.moveDir = placed.Direction
-			p.moveErr = ""
+			p.wizard = newPlacementWizard(
+				p.char, &placed.Item, p.selItem,
+				rpGridX, rpGridY+20,
+				"← Cancel",
+				func(x, y, z uint8, dir model.Direction) error {
+					return p.finalizeMove(x, y, z, dir)
+				},
+				func() { p.wizard = nil; p.mode = rpModeAction },
+			)
 			p.mode = rpModeMoveGrid
 			return
 		}
@@ -165,204 +163,22 @@ func (p *roomPanel) update() {
 			}
 		}
 
-	case rpModeMoveGrid:
-		// cancel
-		bx, by, bw, bh := rpBackBtnRect()
-		if clicked && isHovered(mx, my, bx, by, bw, bh) {
-			p.mode = rpModeAction
-			return
-		}
-		// hover cell
-		gx, gy := p.gridCellAt(mx, my)
-		p.hoverCell = [2]int{gx, gy}
-		if clicked && gx >= 0 {
-			placed := &p.char.CurrentHome.RoomItems[p.selItem]
-			// temporarily remove to avoid self-collision
-			saved := p.char.CurrentHome.RoomItems[p.selItem]
-			p.char.CurrentHome.RoomItems = append(p.char.CurrentHome.RoomItems[:p.selItem], p.char.CurrentHome.RoomItems[p.selItem+1:]...)
-			err := canPlaceOnGrid(p.char.CurrentHome, saved.Item, uint8(gx), uint8(gy))
-			p.char.CurrentHome.RoomItems = append(p.char.CurrentHome.RoomItems[:p.selItem], append([]model.PlacedRoomItem{saved}, p.char.CurrentHome.RoomItems[p.selItem:]...)...)
-			_ = placed
-			if err != nil {
-				p.moveErr = err.Error()
-				return
-			}
-			p.moveX = uint8(gx)
-			p.moveY = uint8(gy)
-			p.moveErr = ""
-			p.mode = rpModeMoveZ
-		}
-
-	case rpModeMoveZ:
-		bx, by, bw, bh := rpBackBtnRect()
-		if clicked && isHovered(mx, my, bx, by, bw, bh) {
-			p.mode = rpModeMoveGrid
-			return
-		}
-		placed := p.char.CurrentHome.RoomItems[p.selItem]
-		mh := int(p.char.CurrentHome.Type.MaxHeight)
-		maxZ := rpMaxMoveZ(p.char.CurrentHome, placed.Item)
-		if clicked {
-			for z := 0; z < mh; z++ {
-				cx2, cy2, cw, ch := spZCellRect(z, mh)
-				if isHovered(mx, my, cx2, cy2, cw, ch) {
-					candidate := uint8(z)
-					canOH := placed.Item.CanOverhang
-					if !canOH && candidate != 0 {
-						break
-					}
-					if candidate <= maxZ {
-						p.moveZ = candidate
-					}
-					break
-				}
-			}
-			zbx, zby, zbw, zbh := spZConfirmBtnRect()
-			if isHovered(mx, my, zbx, zby, zbw, zbh) {
-				p.moveErr = ""
+	case rpModeMoveGrid, rpModeMoveZ, rpModeMoveDir:
+		if p.wizard != nil {
+			p.wizard.update()
+			switch p.wizard.step() {
+			case pwStepZ:
+				p.mode = rpModeMoveZ
+			case pwStepDir:
 				p.mode = rpModeMoveDir
 			}
 		}
-
-	case rpModeMoveDir:
-		bx, by, bw, bh := rpBackBtnRect()
-		if clicked && isHovered(mx, my, bx, by, bw, bh) {
-			p.mode = rpModeMoveZ
-			return
-		}
-		dirs := []model.Direction{model.North, model.East, model.South, model.West}
-		for i, d := range dirs {
-			dbx, dby, dbw, dbh := spDirBtnRect(i)
-			if isHovered(mx, my, dbx, dby, dbw, dbh) {
-				p.moveDir = d
-			}
-			if clicked && isHovered(mx, my, dbx, dby, dbw, dbh) {
-				if !p.moveDirFacesWall(d) {
-					p.finalizeMove(d)
-					return
-				}
-				p.moveErr = "Can't face a wall — pick another direction."
-			}
-		}
 	}
 }
 
-func rpMaxMoveZ(home model.Home, item model.RoomItem) uint8 {
-	mh := home.Type.MaxHeight
-	ih := item.Height
-	if ih >= mh {
-		return 0
-	}
-	return mh - ih
-}
-
-// moveDirFacesWall reuses shopPanel.dirFacesWall logic but for room panel move.
-func (p *roomPanel) moveDirFacesWall(dir model.Direction) bool {
-	placed := p.char.CurrentHome.RoomItems[p.selItem]
-	item := placed.Item
-	home := p.char.CurrentHome
-
-	layout := home.Type.Layout
-	rows := len(layout)
-	if rows == 0 {
-		return false
-	}
-	cols := len(layout[0])
-
-	for _, cell := range occupiedCells(p.moveX, p.moveY, item, dir) {
-		cx, cy := int(cell[0]), int(cell[1])
-		if cy < 0 || cy >= rows || cx < 0 || cx >= cols {
-			return true
-		}
-		if layout[cy][cx] != model.HomeCellFloor && layout[cy][cx] != model.HomeCellDoor {
-			return true
-		}
-	}
-
-	occupied := make(map[[2]uint8]bool)
-	for i, pl := range home.RoomItems {
-		if i == p.selItem {
-			continue
-		}
-		for _, cell := range occupiedCells(pl.X, pl.Y, pl.Item, pl.Direction) {
-			occupied[cell] = true
-		}
-	}
-
-	stepX, stepY := dirStepXY(dir)
-	allCells := occupiedCells(p.moveX, p.moveY, item, dir)
-	footprintSet := make(map[[2]uint8]bool, len(allCells))
-	for _, c := range allCells {
-		footprintSet[c] = true
-	}
-
-	for _, cell := range allCells {
-		cx, cy := int(cell[0]), int(cell[1])
-		if footprintSet[[2]uint8{uint8(cx + stepX), uint8(cy + stepY)}] {
-			continue
-		}
-		n1x, n1y := cx+stepX, cy+stepY
-		if n1x < 0 || n1y < 0 || n1y >= rows || n1x >= cols {
-			return true
-		}
-		if layout[n1y][n1x] == model.HomeCellWall {
-			return true
-		}
-		if !item.NeedClearance {
-			continue
-		}
-		if occupied[[2]uint8{uint8(n1x), uint8(n1y)}] {
-			return true
-		}
-		n2x, n2y := n1x+stepX, n1y+stepY
-		if n2x >= 0 && n2y >= 0 && n2y < rows && n2x < cols {
-			if occupied[[2]uint8{uint8(n2x), uint8(n2y)}] {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// dropZ computes the lowest valid Z for item at (x,y,dir) that doesn't intersect
-// other items or go below the floor. Used when canOverhang==false and the item
-// beneath was moved.
-func dropZ(home model.Home, item model.RoomItem, x, y uint8, dir model.Direction, excludeIdx int) uint8 {
-	for z := uint8(0); ; z++ {
-		if z+item.Height > home.Type.MaxHeight {
-			if z == 0 {
-				return 0
-			}
-			return z - 1
-		}
-		collision := false
-		for _, placed := range home.RoomItems {
-			// skip self
-			skip := false
-			for _, cell := range occupiedCells(placed.X, placed.Y, placed.Item, placed.Direction) {
-				_ = cell
-			}
-			_ = skip
-			if !zRangeOverlaps(z, item.Height, placed.Z, placed.Item.Height) {
-				continue
-			}
-			for _, newCell := range occupiedCells(x, y, item, dir) {
-				for _, oldCell := range occupiedCells(placed.X, placed.Y, placed.Item, placed.Direction) {
-					if newCell == oldCell {
-						collision = true
-					}
-				}
-			}
-		}
-		if !collision {
-			return z
-		}
-	}
-}
-
-func (p *roomPanel) finalizeMove(dir model.Direction) {
+func (p *roomPanel) finalizeMove(x, y, z uint8, dir model.Direction) error {
 	if p.selItem < 0 || p.selItem >= len(p.char.CurrentHome.RoomItems) {
-		return
+		return nil
 	}
 	home := &p.char.CurrentHome
 	placed := &home.RoomItems[p.selItem]
@@ -372,21 +188,19 @@ func (p *roomPanel) finalizeMove(dir model.Direction) {
 	saved := home.RoomItems[p.selItem]
 	home.RoomItems = append(home.RoomItems[:p.selItem], home.RoomItems[p.selItem+1:]...)
 
-	finalZ := p.moveZ
+	finalZ := z
 	if !item.CanOverhang {
 		finalZ = 0
 	}
 
-	if err := canPlace(*home, item, p.moveX, p.moveY, finalZ, dir); err != nil {
+	if err := canPlace(*home, item, x, y, finalZ, dir); err != nil {
 		// Restore
 		home.RoomItems = append(home.RoomItems[:p.selItem], append([]model.PlacedRoomItem{saved}, home.RoomItems[p.selItem:]...)...)
-		p.moveErr = err.Error()
-		p.mode = rpModeMoveGrid
-		return
+		return err
 	}
 
-	saved.X = p.moveX
-	saved.Y = p.moveY
+	saved.X = x
+	saved.Y = y
 	saved.Z = finalZ
 	saved.Direction = dir
 
@@ -395,9 +209,11 @@ func (p *roomPanel) finalizeMove(dir model.Direction) {
 	// Drop any non-overhang items that no longer have support (their Z > dropZ)
 	p.applyGravity()
 
-	p.main.setMessage(fmt.Sprintf("Moved %s to (%d,%d,z=%d) facing %s", item.Name, p.moveX, p.moveY, finalZ, dirName(dir)))
-	p.selCell = [2]int{int(p.moveX), int(p.moveY)}
+	p.main.setMessage(fmt.Sprintf("Moved %s to (%d,%d,z=%d) facing %s", item.Name, x, y, finalZ, dirName(dir)))
+	p.selCell = [2]int{int(x), int(y)}
+	p.wizard = nil
 	p.mode = rpModeFiltered
+	return nil
 }
 
 // applyGravity scans all non-overhang items and drops them to their lowest valid Z.
@@ -669,138 +485,23 @@ func (p *roomPanel) draw(dst *ebiten.Image) {
 		drawButton(dst, "✦ Move", mbx, mby, mbw, mbh, fontS, isHovered(mx, my, mbx, mby, mbw, mbh), true)
 
 	case rpModeMoveGrid:
-		p.drawMoveGridOverlay(dst)
 		drawText(dst, "Step 1: Click cell to move item", float64(rpListX), float64(panelY)+8, fontS, colorMuted)
 		if p.selItem >= 0 && p.selItem < len(char.CurrentHome.RoomItems) {
 			placed := char.CurrentHome.RoomItems[p.selItem]
 			drawText(dst, placed.Item.Name, float64(rpListX), float64(panelY)+28, fontM, colorAccent)
 		}
-		if p.moveErr != "" {
-			drawTextWrapped(dst, p.moveErr, float64(rpListX), float64(panelY)+54, float64(rpListW), 18, fontS, colorRed)
+		if p.wizard != nil && p.wizard.err != "" {
+			drawTextWrapped(dst, p.wizard.err, float64(rpListX), float64(panelY)+54, float64(rpListW), 18, fontS, colorRed)
 		}
 		bx, by, bw, bh := rpBackBtnRect()
 		drawButton(dst, "← Cancel", bx, by, bw, bh, fontS, isHovered(mx, my, bx, by, bw, bh), true)
 
-	case rpModeMoveZ:
-		if p.selItem >= 0 && p.selItem < len(char.CurrentHome.RoomItems) {
-			placed := char.CurrentHome.RoomItems[p.selItem]
-			p.drawMoveZPicker(dst, mx, my, placed)
+	case rpModeMoveZ, rpModeMoveDir:
+		if p.wizard != nil {
+			p.wizard.drawLeftPanel(dst, mx, my)
 		}
 		bx, by, bw, bh := rpBackBtnRect()
 		drawButton(dst, "← Back", bx, by, bw, bh, fontS, isHovered(mx, my, bx, by, bw, bh), true)
-
-	case rpModeMoveDir:
-		if p.selItem >= 0 && p.selItem < len(char.CurrentHome.RoomItems) {
-			placed := char.CurrentHome.RoomItems[p.selItem]
-			p.drawMoveDirPicker(dst, mx, my, placed)
-		}
-		bx, by, bw, bh := rpBackBtnRect()
-		drawButton(dst, "← Back", bx, by, bw, bh, fontS, isHovered(mx, my, bx, by, bw, bh), true)
-	}
-}
-
-func (p *roomPanel) drawMoveGridOverlay(dst *ebiten.Image) {
-	// Just uses drawRoomGrid which is already called; grid hover cursor is drawn there.
-}
-
-func (p *roomPanel) drawMoveZPicker(dst *ebiten.Image, mx, my int, placed model.PlacedRoomItem) {
-	item := placed.Item
-	mh := int(p.char.CurrentHome.Type.MaxHeight)
-	maxZ := int(rpMaxMoveZ(p.char.CurrentHome, item))
-	itemH := int(item.Height)
-	canOH := item.CanOverhang
-	selZ := int(p.moveZ)
-
-	lx := float64(panelX) + 20
-	drawText(dst, "Step 2: Pick height (Z)", lx, float64(panelY)+16, fontS, colorMuted)
-	drawText(dst, item.Name, lx, float64(panelY)+40, fontM, colorAccent)
-	drawText(dst, fmt.Sprintf("pos (%d,%d)", p.moveX, p.moveY), lx, float64(panelY)+66, fontS, colorMuted)
-
-	labelX := float64(zColX) + float64(zCellW) + 8
-	for z := mh - 1; z >= 0; z-- {
-		cx2, cy2, cw, ch := spZCellRect(z, mh)
-		occupied := z >= selZ && z < selZ+itemH
-		validAnchor := canOH || z == 0
-		clickable := validAnchor && z <= maxZ
-
-		var bg color.RGBA
-		switch {
-		case occupied && z == selZ:
-			bg = colorAccent
-		case occupied:
-			bg = colorItem
-		case !clickable:
-			bg = color.RGBA{40, 40, 50, 255}
-		case isHovered(mx, my, cx2, cy2, cw, ch):
-			bg = colorHighlight
-		default:
-			bg = colorPanel
-		}
-		border := colorBorder
-		if !clickable {
-			border = color.RGBA{50, 50, 60, 255}
-		} else if z == selZ {
-			border = colorAccent
-		}
-		fillRect(dst, cx2, cy2, cw, ch, bg)
-		strokeRect(dst, cx2, cy2, cw, ch, border)
-
-		zv := fmt.Sprintf("%d", z)
-		tc := colorMuted
-		if occupied {
-			tc = colorBg
-		}
-		drawText(dst, zv, float64(cx2)+float64(cw)/2-4, float64(cy2)+float64(ch)/2-7, fontS, tc)
-
-		row := mh - 1 - z
-		annY := float64(zColY) + float64(row)*float64(zCellH)
-		var ann string
-		switch {
-		case occupied && z == selZ:
-			ann = "← anchor"
-		case occupied:
-			ann = "[X]"
-		case !clickable:
-			ann = "(locked)"
-		default:
-			ann = "[ ]"
-		}
-		annColor := colorMuted
-		if occupied {
-			annColor = colorAccent
-		}
-		drawText(dst, ann, labelX, annY+float64(zCellH)/2-7, fontS, annColor)
-	}
-
-	legendY := float64(zColY) + float64(mh)*float64(zCellH) + 6
-	drawText(dst, fmt.Sprintf("Item height: %d  MaxH: %d", itemH, mh), float64(zColX), legendY, fontS, colorMuted)
-	if canOH {
-		drawText(dst, "Can overhang: yes", float64(zColX), legendY+16, fontS, colorGreen)
-	}
-
-	cbx, cby, cbw, cbh := spZConfirmBtnRect()
-	drawButton(dst, "Confirm Z →", cbx, cby, cbw, cbh, fontM, isHovered(mx, my, cbx, cby, cbw, cbh), true)
-}
-
-func (p *roomPanel) drawMoveDirPicker(dst *ebiten.Image, mx, my int, placed model.PlacedRoomItem) {
-	lx := float64(panelX) + 20
-	drawText(dst, "Step 3: Choose facing direction", lx, float64(panelY)+16, fontS, colorMuted)
-	drawText(dst, placed.Item.Name, lx, float64(panelY)+40, fontM, colorAccent)
-	drawText(dst, fmt.Sprintf("pos (%d,%d)  z=%d", p.moveX, p.moveY, p.moveZ), lx, float64(panelY)+66, fontS, colorMuted)
-
-	dirs := []model.Direction{model.North, model.East, model.South, model.West}
-	for i, d := range dirs {
-		bx, by, bw, bh := spDirBtnRect(i)
-		blocked := p.moveDirFacesWall(d)
-		hov := isHovered(mx, my, bx, by, bw, bh) && !blocked
-		drawButton(dst, dirBtnLabels[i], bx, by, bw, bh, fontM, hov, !blocked)
-		if blocked {
-			drawText(dst, "wall", float64(bx)+float64(bw)/2-10, float64(by+bh)+2, fontS, colorRed)
-		}
-	}
-
-	if p.moveErr != "" {
-		drawTextWrapped(dst, p.moveErr, float64(panelX)+20, float64(panelY)+240, float64(spListW)-24, 18, fontS, colorRed)
 	}
 }
 
@@ -915,41 +616,8 @@ func (p *roomPanel) drawRoomGrid(dst *ebiten.Image) {
 	}
 
 	// Draw move ghost overlay on top of everything
-	if inMoveMode && p.selItem >= 0 && p.selItem < len(home.RoomItems) {
-		pl := home.RoomItems[p.selItem]
-		var ghostX, ghostY uint8
-		var ghostDir model.Direction
-		var showGhost bool
-		switch p.mode {
-		case rpModeMoveGrid:
-			mx, my := ebiten.CursorPosition()
-			gx, gy := p.gridCellAt(mx, my)
-			if gx >= 0 {
-				ghostX, ghostY = uint8(gx), uint8(gy)
-				ghostDir = pl.Direction
-				showGhost = true
-			}
-		case rpModeMoveZ, rpModeMoveDir:
-			ghostX, ghostY = p.moveX, p.moveY
-			ghostDir = p.moveDir
-			showGhost = true
-		}
-		if showGhost {
-			ghostColor := color.RGBA{100, 220, 120, 160}
-			for _, cell := range occupiedCells(ghostX, ghostY, pl.Item, ghostDir) {
-				cx := ox + float32(cell[0])*rpCellSz
-				cy := oy + float32(cell[1])*rpCellSz
-				fillRect(dst, cx+1, cy+1, rpCellSz-3, rpCellSz-3, ghostColor)
-				// draw item initial in ghost cell
-				if cell[0] == ghostX && cell[1] == ghostY {
-					label := string([]rune(pl.Item.Name)[0:1])
-					drawText(dst, label, float64(cx)+4, float64(cy)+4, fontS, colorBg)
-					drawFacingArrow(dst, ox, oy, int(ghostX), int(ghostY), ghostDir)
-				}
-			}
-			// outline the ghost footprint
-			strokeRect(dst, ox+float32(ghostX)*rpCellSz, oy+float32(ghostY)*rpCellSz, rpCellSz-1, rpCellSz-1, colorGreen)
-		}
+	if inMoveMode && p.wizard != nil {
+		p.wizard.drawGhost(dst, ox, oy)
 	}
 
 	// Floor food
