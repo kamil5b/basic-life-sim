@@ -23,8 +23,9 @@ type roomPanel struct {
 	selItem int // index into RoomItems, -1 = none
 	selAct  int
 
-	mode   rpMode
-	wizard *placementWizard
+	mode      rpMode
+	wizard    *placementWizard
+	fridgeWiz *fridgeWizard
 }
 
 type rpMode int
@@ -82,6 +83,13 @@ func (p *roomPanel) gridCellAt(px, py int) (gx, gy int) {
 }
 
 func (p *roomPanel) update() {
+	if p.fridgeWiz != nil {
+		if p.fridgeWiz.update() {
+			p.fridgeWiz = nil
+		}
+		return
+	}
+
 	mx, my := ebiten.CursorPosition()
 	clicked := inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft)
 
@@ -167,6 +175,21 @@ func (p *roomPanel) update() {
 		if clicked && isHovered(mx, my, tbx, tby, tbw, tbh) {
 			p.executeTrash(placed)
 			return
+		}
+		// organize fridge button (only for storage items)
+		if placed.Item.Storage != nil {
+			obx, oby, obw, obh := rpOrganizeBtnRect()
+			if clicked && isHovered(mx, my, obx, oby, obw, obh) {
+				p.fridgeWiz = newFridgeWizard(
+					p.char, p.selItem,
+					rpGridX, rpGridY+20, rpListX,
+					nil,
+					p.main.setMessage,
+					func() { p.fridgeWiz = nil },
+					func() { p.fridgeWiz = nil },
+				)
+				return
+			}
 		}
 
 		for i, act := range actions {
@@ -490,9 +513,18 @@ func rpTrashBtnRect() (x, y, w, h float32) {
 	return rpListX + 324, panelY + float32(ScreenH) - float32(tabH) - 50, 80, 32
 }
 
+func rpOrganizeBtnRect() (x, y, w, h float32) {
+	return rpListX + 412, panelY + float32(ScreenH) - float32(tabH) - 50, 100, 32
+}
+
 // ── draw ──────────────────────────────────────────────────────────────────────
 
 func (p *roomPanel) draw(dst *ebiten.Image) {
+	if p.fridgeWiz != nil {
+		p.fridgeWiz.draw(dst)
+		return
+	}
+
 	mx, my := ebiten.CursorPosition()
 	char := p.char
 
@@ -627,6 +659,10 @@ func (p *roomPanel) draw(dst *ebiten.Image) {
 		drawButton(dst, "Sell", sbx, sby, sbw, sbh, fontS, isHovered(mx, my, sbx, sby, sbw, sbh), true)
 		tbx, tby, tbw, tbh := rpTrashBtnRect()
 		drawButton(dst, "Trash", tbx, tby, tbw, tbh, fontS, isHovered(mx, my, tbx, tby, tbw, tbh), true)
+		if placed.Item.Storage != nil {
+			obx, oby, obw, obh := rpOrganizeBtnRect()
+			drawButton(dst, "📦 Organize", obx, oby, obw, obh, fontS, isHovered(mx, my, obx, oby, obw, obh), true)
+		}
 
 	case rpModeMoveGrid:
 		drawText(dst, "Step 1: Click cell to move item", float64(rpListX), float64(panelY)+8, fontS, colorMuted)

@@ -48,10 +48,18 @@ type shopPanel struct {
 	foodX, foodY  uint8
 	wizard        *placementWizard
 	stackFloorIdx int // index in FloorFood of the food being stacked onto (-1 = none)
+
+	// fridge placement state
+	fridgeWiz *fridgeWizard
 }
 
 func newShopPanel(char *model.Character, main *mainScreen) *shopPanel {
-	return &shopPanel{char: char, main: main, selItem: -1, stackFloorIdx: -1}
+	return &shopPanel{
+		char:          char,
+		main:          main,
+		selItem:       -1,
+		stackFloorIdx: -1,
+	}
 }
 
 func (p *shopPanel) currentCatalog() []model.RoomItem {
@@ -67,6 +75,15 @@ func (p *shopPanel) currentCatalog() []model.RoomItem {
 }
 
 func (p *shopPanel) update() {
+	if p.fridgeWiz != nil {
+		if p.fridgeWiz.update() {
+			p.fridgeWiz = nil
+			p.pendingFood = nil
+			p.mode = spModeCatalog
+		}
+		return
+	}
+
 	mx, my := ebiten.CursorPosition()
 	clicked := inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft)
 
@@ -174,7 +191,7 @@ func (p *shopPanel) update() {
 			p.stackFloorIdx = -1
 		}
 
-	// ── pick Z / Dir: delegate to wizard ─────────────────────────────────────
+	// ── pick Z / Dir: delegate to wizard ─────────────────────────────────────────────
 	case spModePlaceZ, spModePlaceDir:
 		if p.wizard != nil {
 			p.wizard.update()
@@ -275,28 +292,27 @@ func (p *shopPanel) finalizeFoodPlace() {
 	}
 
 	if fridgeAt >= 0 {
-		placed := &char.CurrentHome.RoomItems[fridgeAt]
-		cap := placed.Item.Storage
-		slot, ok := nextFreeSlot(placed, cap, f)
-		if !ok {
+		// Open the fridge interior UI so the player picks the slot manually.
+		placed := char.CurrentHome.RoomItems[fridgeAt]
+		if placed.Item.Storage.TotalSlots() <= usedSlotCount(&char.CurrentHome.RoomItems[fridgeAt]) {
 			p.main.setMessage("Fridge is full! Choose another cell.")
 			return
 		}
-		char.CurrentStats.Money -= f.BasePrice
-		mult := cap.MultiplierAt(slot[0], slot[1], slot[2])
-		placed.Stored = append(placed.Stored, model.StoredFood{
-			SlotX: slot[0], SlotY: slot[1], SlotZ: slot[2],
-			PurchaseDate:   char.CurrentDate,
-			MultiplierUsed: mult,
-			UsesRemaining:  f.UsesTotal,
-			Food:           f,
-		})
-		expiry := model.ExpiryDate(char.CurrentDate, f.BaseExpiryDays, mult)
-		ey, em, ed := expiry.Unpack()
-		p.main.setMessage(fmt.Sprintf("Bought %s → fridge, exp %04d-%02d-%02d. Money: $%.2f",
-			f.Name, ey, em, ed, char.CurrentStats.Money))
-		p.pendingFood = nil
-		p.mode = spModeCatalog
+		p.fridgeWiz = newFridgeWizard(
+			char, fridgeAt,
+			spGridOriginX(), spGridOriginY(), panelX+8,
+			&f,
+			p.main.setMessage,
+			func() {
+				p.fridgeWiz = nil
+				p.main.setMessage("Cancelled. Click another cell.")
+			},
+			func() {
+				p.fridgeWiz = nil
+				p.pendingFood = nil
+				p.mode = spModeCatalog
+			},
+		)
 		return
 	}
 
@@ -417,6 +433,11 @@ func (p *shopPanel) visibleCatalogLen() int {
 // ── draw ──────────────────────────────────────────────────────────────────────
 
 func (p *shopPanel) draw(dst *ebiten.Image) {
+	if p.fridgeWiz != nil {
+		p.fridgeWiz.draw(dst)
+		return
+	}
+
 	mx, my := ebiten.CursorPosition()
 
 	// Left panel: catalog in catalog/grid mode; wizard draws Z/dir picker
