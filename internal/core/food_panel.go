@@ -2,11 +2,19 @@ package core
 
 import (
 	"fmt"
+	"image/color"
 
 	"github.com/kamil5b/basic-life-sim/internal/model"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
+)
+
+type fpMode int
+
+const (
+	fpModeNormal fpMode = iota
+	fpModeMove
 )
 
 // foodPanel lets the player see all food sources and eat, move-to-fridge, or cook them.
@@ -15,6 +23,8 @@ type foodPanel struct {
 	main    *mainScreen
 	selIdx  int // index into gathered sources
 	sources []foodSource
+	mode    fpMode
+	moveIdx int // index into sources of the item being moved
 }
 
 // foodSource is a flat view of any food the player has.
@@ -31,7 +41,7 @@ type foodSource struct {
 }
 
 func newFoodPanel(char *model.Character, main *mainScreen) *foodPanel {
-	return &foodPanel{char: char, main: main, selIdx: -1}
+	return &foodPanel{char: char, main: main, selIdx: -1, moveIdx: -1}
 }
 
 func (p *foodPanel) gatherSources() []foodSource {
@@ -72,6 +82,35 @@ func (p *foodPanel) update() {
 	p.sources = p.gatherSources()
 	mx, my := ebiten.CursorPosition()
 	clicked := inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft)
+
+	// Move mode: picking a target cell on the room grid
+	if p.mode == fpModeMove {
+		// Cancel
+		if clicked {
+			cx2, cy2, cw, ch := fpCancelBtnRect()
+			if isHovered(mx, my, cx2, cy2, cw, ch) {
+				p.mode = fpModeNormal
+				p.moveIdx = -1
+				return
+			}
+			// Click on grid cell
+			gx, gy := gridCellAtOrigin(mx, my, fpGridOriginX, fpGridOriginY, p.char)
+			if gx >= 0 && p.moveIdx >= 0 && p.moveIdx < len(p.sources) {
+				src := p.sources[p.moveIdx]
+				if src.kind == "floor" {
+					// move to target cell
+					char := p.char
+					char.CurrentHome.FloorFood[src.foodIdx].X = uint8(gx)
+					char.CurrentHome.FloorFood[src.foodIdx].Y = uint8(gy)
+					p.main.setMessage(fmt.Sprintf("Moved %s to (%d,%d).", src.food.Name, gx, gy))
+				}
+				p.mode = fpModeNormal
+				p.moveIdx = -1
+			}
+		}
+		return
+	}
+
 	if !clicked {
 		return
 	}
@@ -111,7 +150,7 @@ func (p *foodPanel) update() {
 		return
 	}
 
-	// Move to fridge button
+	// → Fridge button
 	mx2, my2, mw, mh := fpActionBtnRect(1)
 	if isHovered(mx, my, mx2, my2, mw, mh) && src.kind != "fridge" {
 		fridges := findFridges(char)
@@ -143,7 +182,7 @@ func (p *foodPanel) update() {
 		return
 	}
 
-	// Place on stove button
+	// → Stove button
 	px, py, pw, ph := fpActionBtnRect(2)
 	if isHovered(mx, my, px, py, pw, ph) && src.food.CanBeCooked && src.kind != "surface" {
 		stoves := findStoves(char)
@@ -166,6 +205,41 @@ func (p *foodPanel) update() {
 		p.selIdx = -1
 		return
 	}
+
+	// → Floor button (take out of fridge)
+	fx, fy, fw, fh := fpActionBtnRect(3)
+	if isHovered(mx, my, fx, fy, fw, fh) && src.kind == "fridge" {
+		daysElapsed := model.DaysBetween(src.purchaseDate, char.CurrentDate)
+		fridgeDaysConsumed := float32(daysElapsed) / src.multiplier
+		remaining := float32(src.food.BaseExpiryDays) - fridgeDaysConsumed
+		if remaining < 1 {
+			remaining = 1
+		}
+		newFood := src.food
+		newFood.BaseExpiryDays = uint16(remaining)
+		removeFoodEntirely(char, src.kind, src.itemIdx, src.foodIdx)
+		char.CurrentHome.FloorFood = append(char.CurrentHome.FloorFood, model.PlacedFood{
+			X: 0, Y: 0, Z: 0,
+			PurchaseDate:  char.CurrentDate,
+			UsesRemaining: src.usesRemaining,
+			Food:          newFood,
+		})
+		expiry := model.ExpiryDate(char.CurrentDate, newFood.BaseExpiryDays, 1)
+		ey2, em, ed := expiry.Unpack()
+		p.main.setMessage(fmt.Sprintf("Took %s out of fridge → floor. New exp %04d-%02d-%02d",
+			src.food.Name, ey2, em, ed))
+		p.selIdx = -1
+		return
+	}
+
+	// ✦ Move button (floor food)
+	mvx, mvy, mvw, mvh := fpActionBtnRect(4)
+	if isHovered(mx, my, mvx, mvy, mvw, mvh) && src.kind == "floor" {
+		p.moveIdx = p.selIdx
+		p.mode = fpModeMove
+		p.main.setMessage(fmt.Sprintf("Moving %s — click a floor cell.", src.food.Name))
+		return
+	}
 }
 
 func findStoves(char *model.Character) []int {
@@ -177,6 +251,11 @@ func findStoves(char *model.Character) []int {
 	}
 	return out
 }
+
+const (
+	fpGridOriginX = panelX + 320
+	fpGridOriginY = panelY + 40
+)
 
 const (
 	fpListX  = panelX + 8
@@ -191,6 +270,10 @@ const (
 
 func fpRowRect(i int) (x, y, w, h float32) {
 	return fpListX, fpListY + float32(i)*fpRowH, fpListW, fpRowH - 2
+}
+
+func fpCancelBtnRect() (x, y, w, h float32) {
+	return fpGridOriginX, fpGridOriginY - 26, 90, 22
 }
 
 func fpActionBtnRect(i int) (x, y, w, h float32) {
@@ -270,5 +353,65 @@ func (p *foodPanel) draw(dst *ebiten.Image) {
 		stoveEnabled := src.food.CanBeCooked && src.kind != "surface" && len(findStoves(char)) > 0
 		px, py, pw, ph := fpActionBtnRect(2)
 		drawButton(dst, "→ Stove", px, py, pw, ph, fontM, isHovered(mx, my, px, py, pw, ph) && stoveEnabled, stoveEnabled)
+
+		floorEnabled := src.kind == "fridge"
+		fax, fay, faw, fah := fpActionBtnRect(3)
+		drawButton(dst, "→ Floor", fax, fay, faw, fah, fontM, isHovered(mx, my, fax, fay, faw, fah) && floorEnabled, floorEnabled)
+
+		moveEnabled := src.kind == "floor"
+		mvx, mvy, mvw, mvh := fpActionBtnRect(4)
+		drawButton(dst, "✦ Move", mvx, mvy, mvw, mvh, fontM, isHovered(mx, my, mvx, mvy, mvw, mvh) && moveEnabled, moveEnabled)
+	}
+
+	// Move mode: draw grid overlay
+	if p.mode == fpModeMove {
+		home := p.char.CurrentHome
+		layout := home.Type.Layout
+		if len(layout) > 0 {
+			ox := fpGridOriginX
+			oy := fpGridOriginY
+			rows := len(layout)
+			cols := len(layout[0])
+			drawText(dst, "Click cell to move food here:", float64(ox), float64(oy)-30, fontS, colorAccent)
+			cx2, cy2, cw, ch := fpCancelBtnRect()
+			drawButton(dst, "✕ Cancel", cx2, cy2, cw, ch, fontS, isHovered(mx, my, cx2, cy2, cw, ch), true)
+			for r := 0; r < rows; r++ {
+				for c := 0; c < cols; c++ {
+					cellX := ox + float32(c)*rpCellSz
+					cellY := oy + float32(r)*rpCellSz
+					var bg color.RGBA
+					switch layout[r][c] {
+					case model.HomeCellWall:
+						bg = colorWall
+					case model.HomeCellFloor:
+						bg = colorFloor
+					case model.HomeCellDoor:
+						bg = colorDoor
+					}
+					fillRect(dst, cellX, cellY, rpCellSz-1, rpCellSz-1, bg)
+				}
+			}
+			// existing items overlay
+			for _, placed := range home.RoomItems {
+				for _, cell := range occupiedCells(placed.X, placed.Y, placed.Item, placed.Direction) {
+					cellX := ox + float32(cell[0])*rpCellSz
+					cellY := oy + float32(cell[1])*rpCellSz
+					fillRect(dst, cellX+1, cellY+1, rpCellSz-3, rpCellSz-3, colorItem)
+				}
+			}
+			// floor food overlay
+			for _, ff := range home.FloorFood {
+				cellX := ox + float32(ff.X)*rpCellSz
+				cellY := oy + float32(ff.Y)*rpCellSz
+				fillRect(dst, cellX+8, cellY+8, rpCellSz-17, rpCellSz-17, colorFoodFloor)
+			}
+			// cursor hover highlight
+			hx, hy := gridCellAtOrigin(mx, my, ox, oy, p.char)
+			if hx >= 0 {
+				cellX := ox + float32(hx)*rpCellSz
+				cellY := oy + float32(hy)*rpCellSz
+				strokeRect(dst, cellX, cellY, rpCellSz-1, rpCellSz-1, colorAccent)
+			}
+		}
 	}
 }

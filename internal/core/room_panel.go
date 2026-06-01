@@ -156,6 +156,19 @@ func (p *roomPanel) update() {
 			return
 		}
 
+		// sell button
+		sbx, sby, sbw, sbh := rpSellBtnRect()
+		if clicked && isHovered(mx, my, sbx, sby, sbw, sbh) {
+			p.executeSell(placed)
+			return
+		}
+		// trash button
+		tbx, tby, tbw, tbh := rpTrashBtnRect()
+		if clicked && isHovered(mx, my, tbx, tby, tbw, tbh) {
+			p.executeTrash(placed)
+			return
+		}
+
 		for i, act := range actions {
 			ax, ay, aw, ah := rpActionRowRect(i)
 			if clicked && isHovered(mx, my, ax, ay, aw, ah) {
@@ -409,6 +422,38 @@ func (p *roomPanel) executeAction(placed *model.PlacedRoomItem, action string) {
 	p.main.setMessage(fmt.Sprintf("Used %s: %s", placed.Item.Name, action))
 }
 
+func (p *roomPanel) executeSell(placed *model.PlacedRoomItem) {
+	if p.selItem < 0 || p.selItem >= len(p.char.CurrentHome.RoomItems) {
+		return
+	}
+	refund := placed.Item.BasePrice * 0.5
+	p.char.CurrentStats.Money += refund
+	p.char.CurrentHome.RoomItems = append(
+		p.char.CurrentHome.RoomItems[:p.selItem],
+		p.char.CurrentHome.RoomItems[p.selItem+1:]...,
+	)
+	p.main.setMessage(fmt.Sprintf("Sold %s for $%.2f (50%% refund). Money: $%.2f",
+		placed.Item.Name, refund, p.char.CurrentStats.Money))
+	p.selItem = -1
+	p.selCell = [2]int{-1, -1}
+	p.mode = rpModeList
+}
+
+func (p *roomPanel) executeTrash(placed *model.PlacedRoomItem) {
+	if p.selItem < 0 || p.selItem >= len(p.char.CurrentHome.RoomItems) {
+		return
+	}
+	name := placed.Item.Name
+	p.char.CurrentHome.RoomItems = append(
+		p.char.CurrentHome.RoomItems[:p.selItem],
+		p.char.CurrentHome.RoomItems[p.selItem+1:]...,
+	)
+	p.main.setMessage(fmt.Sprintf("Trashed %s.", name))
+	p.selItem = -1
+	p.selCell = [2]int{-1, -1}
+	p.mode = rpModeList
+}
+
 // ── layout helpers ────────────────────────────────────────────────────────────
 
 const (
@@ -435,6 +480,14 @@ func rpBackBtnRect() (x, y, w, h float32) {
 
 func rpMoveBtnRect() (x, y, w, h float32) {
 	return rpListX + 108, panelY + float32(ScreenH) - float32(tabH) - 50, 120, 32
+}
+
+func rpSellBtnRect() (x, y, w, h float32) {
+	return rpListX + 236, panelY + float32(ScreenH) - float32(tabH) - 50, 80, 32
+}
+
+func rpTrashBtnRect() (x, y, w, h float32) {
+	return rpListX + 324, panelY + float32(ScreenH) - float32(tabH) - 50, 80, 32
 }
 
 // ── draw ──────────────────────────────────────────────────────────────────────
@@ -570,6 +623,10 @@ func (p *roomPanel) draw(dst *ebiten.Image) {
 		drawButton(dst, "← Back", bx, by, bw, bh, fontS, isHovered(mx, my, bx, by, bw, bh), true)
 		mbx, mby, mbw, mbh := rpMoveBtnRect()
 		drawButton(dst, "✦ Move", mbx, mby, mbw, mbh, fontS, isHovered(mx, my, mbx, mby, mbw, mbh), true)
+		sbx, sby, sbw, sbh := rpSellBtnRect()
+		drawButton(dst, "Sell", sbx, sby, sbw, sbh, fontS, isHovered(mx, my, sbx, sby, sbw, sbh), true)
+		tbx, tby, tbw, tbh := rpTrashBtnRect()
+		drawButton(dst, "Trash", tbx, tby, tbw, tbh, fontS, isHovered(mx, my, tbx, tby, tbw, tbh), true)
 
 	case rpModeMoveGrid:
 		drawText(dst, "Step 1: Click cell to move item", float64(rpListX), float64(panelY)+8, fontS, colorMuted)

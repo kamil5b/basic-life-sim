@@ -440,6 +440,21 @@ func consumeUse(char *model.Character, kind string, itemIdx, foodIdx int) {
 	}
 }
 
+// nextFoodZ returns the Z at which new food should be placed at (x,y),
+// stacking on top of any existing floor food at that cell.
+func nextFoodZ(char *model.Character, x, y uint8) uint8 {
+	maxTop := uint8(0)
+	for _, ff := range char.CurrentHome.FloorFood {
+		if ff.X == x && ff.Y == y {
+			top := ff.Z + ff.Food.Height
+			if top > maxTop {
+				maxTop = top
+			}
+		}
+	}
+	return maxTop
+}
+
 func removeFoodEntirely(char *model.Character, kind string, itemIdx, foodIdx int) {
 	switch kind {
 	case "floor":
