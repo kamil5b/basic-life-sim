@@ -16,4 +16,4 @@ Steps:
 ### Cooking logic
 - Add new buyable item category: utilities. It include knife, pan, wok, etc.
 - If food placed on the kitchen utilities, it will change form (if the utilities have abilities like knife, chopper, grinder, etc.) OR it can be placed on the utilities (if the utilities is like wok, pan, etc.)
-- Cooking utilities (like pan, wok, etc) can be placed on the stove, and it will cook the food inside it.
+- Cooking utilities (like pan, wok, etc) can be placed on the stove / oven / etc (that can cook things), and it will cook the food inside it.
