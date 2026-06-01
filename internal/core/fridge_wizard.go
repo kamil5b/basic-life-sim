@@ -33,8 +33,8 @@ type fridgeWizard struct {
 	selSlotX int // -1 = not yet picked
 	selSlotY int
 
-	// rotation (swaps food Width↔Length for placement)
-	rotated bool
+	// rotation: 0-5 cycles through all 6 axis-aligned orientations
+	rotationIdx int
 
 	// move mode (room context only)
 	moveMode      bool
@@ -63,12 +63,13 @@ func newFridgeWizard(
 	onCancel func(),
 	onDone func(),
 ) *fridgeWizard {
-	return &fridgeWizard{
+	w := &fridgeWizard{
 		char:          char,
 		fridgeIdx:     fridgeIdx,
 		selZ:          -1,
 		selSlotX:      -1,
 		selSlotY:      -1,
+		rotationIdx:   0,
 		movingFoodIdx: -1,
 		pendingFood:   pendingFood,
 		chargeMoney:   chargeMoney,
@@ -79,6 +80,11 @@ func newFridgeWizard(
 		onCancel:      onCancel,
 		onDone:        onDone,
 	}
+	// Auto-rotate to a valid orientation that fits the fridge's Z capacity.
+	if pendingFood != nil {
+		w.ensureValidRotation(char.CurrentHome.RoomItems[fridgeIdx].Item.Storage)
+	}
+	return w
 }
 
 // ── top-surface helpers ───────────────────────────────────────────────────────
@@ -116,22 +122,110 @@ func (w *fridgeWizard) findFoodAtSel(placed *model.PlacedRoomItem) int {
 	if !w.fullySelected() {
 		return -1
 	}
-	z := uint8(w.selZ)
+	sx, sy, sz := uint8(w.selSlotX), uint8(w.selSlotY), uint8(w.selZ)
 	for i, s := range placed.Stored {
-		if s.SlotZ == z && int(s.SlotX) == w.selSlotX && int(s.SlotY) == w.selSlotY {
+		if sx >= s.SlotX && sx < s.SlotX+s.Food.Width &&
+			sy >= s.SlotY && sy < s.SlotY+s.Food.Length &&
+			sz >= s.SlotZ && sz < s.SlotZ+s.Food.Height {
 			return i
 		}
 	}
 	return -1
 }
 
-// effectiveFood returns the food with Width/Length swapped when rotated.
-// Pass a Food value (for pending) or a copy from Stored.
-func rotateFood(f model.Food, rotated bool) model.Food {
-	if rotated {
-		f.Width, f.Length = f.Length, f.Width
-	}
+// rotationTable lists all 6 axis-aligned permutations of (Width, Length, Height).
+// Each entry is [widthSrc, lengthSrc, heightSrc] — indices into the original [W, L, H] array.
+var rotationTable = [6][3]int{
+	{0, 1, 2}, // original
+	{1, 0, 2}, // swap W↔L
+	{0, 2, 1}, // swap L↔H
+	{2, 1, 0}, // swap W↔H
+	{1, 2, 0}, // W→L, L→H, H→W
+	{2, 0, 1}, // W→H, L→W, H→L
+}
+
+// rotationLabel returns a short human-readable name for each rotation.
+var rotationLabel = [6]string{
+	"W×L×H", "L×W×H", "W×H×L", "H×L×W", "L×H×W", "H×W×L",
+}
+
+// applyRotation returns a copy of f with its dimensions permuted by rotIdx.
+func applyRotation(f model.Food, rotIdx int) model.Food {
+	dims := [3]uint8{f.Width, f.Length, f.Height}
+	p := rotationTable[rotIdx%6]
+	f.Width = dims[p[0]]
+	f.Length = dims[p[1]]
+	f.Height = dims[p[2]]
 	return f
+}
+
+// ── rotation / Z validity helpers ───────────────────────────────────────────
+
+// activeFoodBase returns the un-rotated food being placed/moved, or nil.
+func (w *fridgeWizard) activeFoodBase(placed *model.PlacedRoomItem) *model.Food {
+	if w.pendingFood != nil {
+		return w.pendingFood
+	}
+	if w.moveMode && w.movingFoodIdx >= 0 && placed != nil {
+		f := placed.Stored[w.movingFoodIdx].Food
+		return &f
+	}
+	return nil
+}
+
+// activeFood returns the food in the current rotation, or zero-value if none.
+func (w *fridgeWizard) activeFood(placed *model.PlacedRoomItem) (model.Food, bool) {
+	base := w.activeFoodBase(placed)
+	if base == nil {
+		return model.Food{}, false
+	}
+	return applyRotation(*base, w.rotationIdx), true
+}
+
+// rotationFitsZ returns true if applyRotation(food, rotIdx) has Height <= maxZ.
+func rotationFitsZ(food model.Food, rotIdx int, maxZ uint8) bool {
+	return applyRotation(food, rotIdx).Height <= maxZ
+}
+
+// ensureValidRotation adjusts rotationIdx to the first orientation whose Height
+// fits within storage.Height, if the current one is invalid.
+func (w *fridgeWizard) ensureValidRotation(storage *model.StorageCapacity) {
+	base := w.activeFoodBase(nil) // pending food only in ctor context
+	if base == nil {
+		if w.pendingFood == nil {
+			return
+		}
+		base = w.pendingFood
+	}
+	if rotationFitsZ(*base, w.rotationIdx, storage.Height) {
+		return
+	}
+	for i := 0; i < 6; i++ {
+		if rotationFitsZ(*base, i, storage.Height) {
+			w.rotationIdx = i
+			w.selSlotX = -1
+			w.selSlotY = -1
+			return
+		}
+	}
+}
+
+// nextValidRotationIdx cycles to the next rotation that fits within storage.Height.
+func (w *fridgeWizard) nextValidRotationIdx(storage *model.StorageCapacity, base model.Food) int {
+	for i := 1; i <= 6; i++ {
+		idx := (w.rotationIdx + i) % 6
+		if rotationFitsZ(base, idx, storage.Height) {
+			return idx
+		}
+	}
+	return w.rotationIdx // no change if nothing fits (shouldn't happen)
+}
+
+// isZSelectableFor returns true if z is a valid TOP anchor for a food of the given height.
+// The anchor is the highest Z the food occupies; it extends downward to z-foodH+1,
+// so z must be >= foodH-1 (enough room below).
+func isZSelectableFor(z int, foodH, fridgeH uint8) bool {
+	return z >= int(foodH)-1
 }
 
 func isColdAt(storage *model.StorageCapacity, x, y, z uint8) bool {
@@ -214,26 +308,45 @@ func (w *fridgeWizard) update() bool {
 		return true
 	}
 
-	// Rotate button — available in phase 2
+	// Rotate button — available in phase 2; only cycles valid orientations
 	if w.selZ >= 0 {
-		rx, ry, rw, rh := w.rotateBtnRect(storage)
-		if isHovered(mx, my, rx, ry, rw, rh) {
-			w.rotated = !w.rotated
-			w.selSlotX = -1
-			w.selSlotY = -1
-			return false
+		base, hasFood := w.activeFood(placed)
+		if hasFood {
+			rx, ry, rw, rh := w.rotateBtnRect(storage)
+			if isHovered(mx, my, rx, ry, rw, rh) {
+				w.rotationIdx = w.nextValidRotationIdx(storage, base)
+				w.selSlotX = -1
+				w.selSlotY = -1
+				// Re-validate selZ: if food now doesn't fit starting there, reset
+				if w.selZ >= 0 {
+					f := applyRotation(*w.activeFoodBase(placed), w.rotationIdx)
+					if !isZSelectableFor(w.selZ, f.Height, storage.Height) {
+						w.selZ = -1
+					}
+				}
+				return false
+			}
 		}
 	}
 
 	// ── actions that require full selection ───────────────────────────────────
 	if w.fullySelected() {
-		slotX, slotY, slotZ := uint8(w.selSlotX), uint8(w.selSlotY), uint8(w.selZ)
+		slotX, slotY := uint8(w.selSlotX), uint8(w.selSlotY)
+		// selZ is the TOP anchor; actual bottom SlotZ = selZ - foodH + 1
+		computeSlotZ := func(foodH uint8) uint8 {
+			v := int(w.selZ) - int(foodH) + 1
+			if v < 0 {
+				v = 0
+			}
+			return uint8(v)
+		}
 
 		if w.pendingFood != nil {
 			// Place Here
 			a1x, a1y, a1w, a1h := w.action1BtnRect()
 			if isHovered(mx, my, a1x, a1y, a1w, a1h) {
-				f := rotateFood(*w.pendingFood, w.rotated)
+				f := applyRotation(*w.pendingFood, w.rotationIdx)
+				slotZ := computeSlotZ(f.Height)
 				occupied := occupiedFoodSlots(placed)
 				if canFitFood(occupied, storage, f, slotX, slotY, slotZ) {
 					mult := storage.MultiplierAt(slotX, slotY, slotZ)
@@ -249,12 +362,8 @@ func (w *fridgeWizard) update() bool {
 					})
 					expiry := model.ExpiryDate(w.char.CurrentDate, f.BaseExpiryDays, mult)
 					ey, em, ed := expiry.Unpack()
-					rot := ""
-					if w.rotated {
-						rot = " [rotated]"
-					}
-					w.setMsg(fmt.Sprintf("Placed %s%s → (x=%d,y=%d,z=%d), exp %04d-%02d-%02d",
-						f.Name, rot, slotX, slotY, slotZ, ey, em, ed))
+					w.setMsg(fmt.Sprintf("Placed %s [%s] → (x=%d,y=%d,z=%d), exp %04d-%02d-%02d",
+						f.Name, rotationLabel[w.rotationIdx%6], slotX, slotY, slotZ, ey, em, ed))
 					w.onDone()
 					return true
 				}
@@ -309,7 +418,8 @@ func (w *fridgeWizard) update() bool {
 					if idx >= 0 {
 						w.movingFoodIdx = idx
 						w.moveMode = true
-						w.rotated = false
+						w.rotationIdx = 0
+						w.ensureValidRotation(storage)
 						w.setMsg("Pick Z then XY for the target slot. Use Rotate to reorient.")
 						// reset selection so user picks a target
 						w.selZ = -1
@@ -319,7 +429,7 @@ func (w *fridgeWizard) update() bool {
 				} else {
 					w.moveMode = false
 					w.movingFoodIdx = -1
-					w.rotated = false
+					w.rotationIdx = 0
 				}
 				return false
 			}
@@ -330,16 +440,13 @@ func (w *fridgeWizard) update() bool {
 	if w.selZ >= 0 {
 		gx, gy := w.xyCellAt(mx, my, storage)
 		if gx >= 0 {
-			if w.moveMode && w.movingFoodIdx >= 0 && w.fullySelected() {
-				// second XY click after a first one — treat as new target
-			}
 			w.selSlotX = gx
 			w.selSlotY = gy
 
 			// If in move mode and fully selected, execute the move immediately
 			if w.moveMode && w.movingFoodIdx >= 0 {
 				sf := &placed.Stored[w.movingFoodIdx]
-				mf := rotateFood(sf.Food, w.rotated)
+				mf := applyRotation(sf.Food, w.rotationIdx)
 				occupied := occupiedFoodSlots(placed)
 				// Remove source slots from occupied map
 				for dz := uint8(0); dz < sf.Food.Height; dz++ {
@@ -349,19 +456,21 @@ func (w *fridgeWizard) update() bool {
 						}
 					}
 				}
-				tX, tY, tZ := uint8(gx), uint8(gy), uint8(w.selZ)
+				tX, tY := uint8(gx), uint8(gy)
+				tZv := int(w.selZ) - int(mf.Height) + 1
+				if tZv < 0 {
+					tZv = 0
+				}
+				tZ := uint8(tZv)
 				if canFitFood(occupied, storage, mf, tX, tY, tZ) {
 					sf.Food = mf
 					sf.SlotX, sf.SlotY, sf.SlotZ = tX, tY, tZ
 					sf.MultiplierUsed = storage.MultiplierAt(tX, tY, tZ)
-					rot := ""
-					if w.rotated {
-						rot = " [rotated]"
-					}
-					w.setMsg(fmt.Sprintf("Moved %s%s to (x=%d,y=%d,z=%d)", mf.Name, rot, tX, tY, tZ))
+					w.setMsg(fmt.Sprintf("Moved %s [%s] to (x=%d,y=%d,z=%d)",
+						mf.Name, rotationLabel[w.rotationIdx%6], tX, tY, tZ))
 					w.moveMode = false
 					w.movingFoodIdx = -1
-					w.rotated = false
+					w.rotationIdx = 0
 					w.selZ = -1
 					w.selSlotX = -1
 					w.selSlotY = -1
@@ -378,9 +487,13 @@ func (w *fridgeWizard) update() bool {
 	// ── phase 1: Z column click ───────────────────────────────────────────────
 	z := w.zColCellAt(mx, my, storage)
 	if z >= 0 {
-		w.selZ = z
-		w.selSlotX = -1
-		w.selSlotY = -1
+		// Check if food in current rotation fits starting at this Z
+		f, hasF := w.activeFood(placed)
+		if !hasF || isZSelectableFor(z, f.Height, storage.Height) {
+			w.selZ = z
+			w.selSlotX = -1
+			w.selSlotY = -1
+		}
 	}
 
 	return false
@@ -400,34 +513,35 @@ func (w *fridgeWizard) draw(dst *ebiten.Image) {
 
 	// ── left info panel ───────────────────────────────────────────────────────
 	if w.pendingFood != nil {
-		f := rotateFood(*w.pendingFood, w.rotated)
-		rotTag := ""
-		if w.rotated {
-			rotTag = " [rotated]"
-		}
+		f := applyRotation(*w.pendingFood, w.rotationIdx)
 		drawText(dst, "Place in "+placed.Item.Name, lx, float64(panelY)+14, fontM, colorAccent)
-		drawText(dst, fmt.Sprintf("Buying: %s%s  $%.2f  uses:%d",
-			w.pendingFood.Name, rotTag, w.pendingFood.BasePrice, w.pendingFood.UsesTotal),
+		drawText(dst, fmt.Sprintf("Buying: %s  $%.2f  uses:%d",
+			w.pendingFood.Name, w.pendingFood.BasePrice, w.pendingFood.UsesTotal),
 			lx, float64(panelY)+38, fontS, colorText)
-		drawText(dst, fmt.Sprintf("Size: %dx%d (W×L)  Slots: %d/%d used",
-			f.Width, f.Length, used, total),
+		drawText(dst, fmt.Sprintf("Orientation: %s  (%dx%dx%d W×L×H)  %d/%d slots",
+			rotationLabel[w.rotationIdx%6], f.Width, f.Length, f.Height, used, total),
 			lx, float64(panelY)+56, fontS, colorMuted)
 		drawText(dst, "❄ = cold zone  Step 1: pick Z  Step 2: pick XY",
 			lx, float64(panelY)+74, fontS, colorMuted)
 
 		if w.fullySelected() {
-			slotX, slotY, slotZ := uint8(w.selSlotX), uint8(w.selSlotY), uint8(w.selZ)
-			mult := storage.MultiplierAt(slotX, slotY, slotZ)
+			slotX, slotY := uint8(w.selSlotX), uint8(w.selSlotY)
+			slotZBottom := uint8(int(w.selZ) - int(f.Height) + 1)
+			mult := storage.MultiplierAt(slotX, slotY, slotZBottom)
 			expiry := model.ExpiryDate(char.CurrentDate, f.BaseExpiryDays, mult)
 			ey, em, ed := expiry.Unpack()
 			occupied := occupiedFoodSlots(&char.CurrentHome.RoomItems[w.fridgeIdx])
-			canPlace := canFitFood(occupied, storage, f, slotX, slotY, slotZ)
+			canPlace := canFitFood(occupied, storage, f, slotX, slotY, slotZBottom)
 			col := colorGreen
-			msg := fmt.Sprintf("(x=%d,y=%d,z=%d)  %.1fx  exp:%04d-%02d-%02d",
-				slotX, slotY, slotZ, mult, ey, em, ed)
+			zDesc := fmt.Sprintf("z=%d", w.selZ)
+			if f.Height > 1 {
+				zDesc = fmt.Sprintf("z%d–%d", slotZBottom, w.selZ)
+			}
+			msg := fmt.Sprintf("(x=%d,y=%d,%s)  %.1fx  exp:%04d-%02d-%02d",
+				slotX, slotY, zDesc, mult, ey, em, ed)
 			if !canPlace {
 				col = colorRed
-				msg = fmt.Sprintf("(x=%d,y=%d,z=%d) — does not fit", slotX, slotY, slotZ)
+				msg = fmt.Sprintf("(x=%d,y=%d,%s) — does not fit", slotX, slotY, zDesc)
 			}
 			drawText(dst, msg, lx, float64(panelY)+96, fontS, col)
 			a1x, a1y, a1w, a1h := w.action1BtnRect()
@@ -449,13 +563,12 @@ func (w *fridgeWizard) draw(dst *ebiten.Image) {
 
 		if w.moveMode && w.movingFoodIdx >= 0 {
 			sf := placed.Stored[w.movingFoodIdx]
-			mf := rotateFood(sf.Food, w.rotated)
-			rotTag := ""
-			if w.rotated {
-				rotTag = " [rotated]"
-			}
-			drawText(dst, fmt.Sprintf("Moving: %s%s (%dx%d)", mf.Name, rotTag, mf.Width, mf.Length),
+			mf := applyRotation(sf.Food, w.rotationIdx)
+			drawText(dst, fmt.Sprintf("Moving: %s", mf.Name),
 				lx, float64(panelY)+66, fontS, colorYellow)
+			drawText(dst, fmt.Sprintf("Orientation: %s  (%dx%dx%d W×L×H)",
+				rotationLabel[w.rotationIdx%6], mf.Width, mf.Length, mf.Height),
+				lx, float64(panelY)+84, fontS, colorMuted)
 			drawText(dst, "Pick Z then XY target slot",
 				lx, float64(panelY)+84, fontS, colorMuted)
 		} else if w.fullySelected() {
@@ -513,6 +626,13 @@ func (w *fridgeWizard) draw(dst *ebiten.Image) {
 
 	drawText(dst, "Z", float64(ox)+float64(cs)/2-4, float64(oy)-16, fontS, colorMuted)
 
+	// compute active food height for Z validity and span display
+	actF, hasActF := w.activeFood(&placed)
+	var actFoodH uint8
+	if hasActF {
+		actFoodH = actF.Height
+	}
+
 	for zIdx := 0; zIdx < int(storage.Height); zIdx++ {
 		z := uint8(int(storage.Height) - 1 - zIdx) // row 0 = highest Z
 		cy := oy + float32(zIdx)*cs
@@ -539,13 +659,23 @@ func (w *fridgeWizard) draw(dst *ebiten.Image) {
 			}
 		}
 
-		isSel := w.selZ == int(z)
-		hov := isHovered(mx, my, ox, cy, cs-1, cs-1)
+		// Z validity for the active food
+		validZ := !hasActF || isZSelectableFor(int(z), actFoodH, storage.Height)
+
+		// Top-anchor: selZ is the TOP of the food; food spans from selZ down to selZ-foodH+1.
+		inSpan := hasActF && w.selZ >= 0 && int(z) <= w.selZ && int(z) > w.selZ-int(actFoodH)
+		isSelStart := w.selZ == int(z) // the top anchor cell
+
+		hov := isHovered(mx, my, ox, cy, cs-1, cs-1) && validZ
 
 		var bg color.RGBA
 		switch {
-		case isSel:
+		case isSelStart:
 			bg = colorSelected
+		case inSpan:
+			bg = color.RGBA{40, 80, 160, 255} // blue tint = part of food span
+		case !validZ:
+			bg = color.RGBA{22, 22, 28, 255} // dimmed = can't start food here
 		case usedSlots == totalSlots && hasExpired:
 			bg = color.RGBA{80, 20, 20, 255}
 		case usedSlots > 0 && hasExpired:
@@ -562,8 +692,12 @@ func (w *fridgeWizard) draw(dst *ebiten.Image) {
 			bg = color.RGBA{28, 35, 50, 255}
 		}
 		borderCol := colorBorder
-		if isSel {
+		if isSelStart {
 			borderCol = colorAccent
+		} else if inSpan {
+			borderCol = colorAccent
+		} else if !validZ {
+			borderCol = color.RGBA{35, 35, 42, 255}
 		} else if hasCold {
 			borderCol = color.RGBA{60, 120, 220, 255}
 		}
@@ -574,8 +708,22 @@ func (w *fridgeWizard) draw(dst *ebiten.Image) {
 		if hasCold {
 			zLabel += "❄"
 		}
-		drawText(dst, zLabel, float64(ox)+3, float64(cy)+3, fontS, colorMuted)
-		if usedSlots > 0 {
+		if !validZ {
+			zLabel += "✗"
+		}
+		textCol := colorMuted
+		if !validZ {
+			textCol = color.RGBA{55, 55, 60, 255}
+		}
+		drawText(dst, zLabel, float64(ox)+3, float64(cy)+3, fontS, textCol)
+		if !validZ {
+			// no occupancy detail for invalid cells
+		} else if isSelStart && actFoodH > 1 {
+			// show span: top (selZ) down to selZ-foodH+1
+			bottomZ := int(w.selZ) - int(actFoodH) + 1
+			drawText(dst, fmt.Sprintf("z%d–%d", bottomZ, w.selZ),
+				float64(ox)+3, float64(cy)+20, fontS, colorAccent)
+		} else if usedSlots > 0 {
 			tc := colorText
 			if hasExpired {
 				tc = colorRed
@@ -598,23 +746,37 @@ func (w *fridgeWizard) draw(dst *ebiten.Image) {
 
 	// Rotate button
 	rx, ry, rw, rh := w.rotateBtnRect(storage)
-	rotLabel := "↺ Rotate"
-	if w.rotated {
-		rotLabel = "↺ Rotated"
-	}
+	rotLabel := fmt.Sprintf("↺ %s", rotationLabel[w.rotationIdx%6])
 	showRotate := w.pendingFood != nil || (w.moveMode && w.movingFoodIdx >= 0)
 	if showRotate {
-		drawButton(dst, rotLabel, rx, ry, rw, rh, fontS, isHovered(mx, my, rx, ry, rw, rh), true)
+		// Count how many valid rotations exist for this fridge
+		validRotCount := 0
+		var baseForRot model.Food
+		if w.pendingFood != nil {
+			baseForRot = *w.pendingFood
+		} else if w.moveMode && w.movingFoodIdx >= 0 {
+			baseForRot = placed.Stored[w.movingFoodIdx].Food
+		}
+		for i := 0; i < 6; i++ {
+			if rotationFitsZ(baseForRot, i, storage.Height) {
+				validRotCount++
+			}
+		}
+		canRotate := validRotCount > 1
+		drawButton(dst, rotLabel, rx, ry, rw, rh, fontS, isHovered(mx, my, rx, ry, rw, rh) && canRotate, canRotate)
+		if !canRotate {
+			drawText(dst, "(only flat fits)", float64(rx), float64(ry)+float64(rh)+2, fontS, colorMuted)
+		}
 	}
 
 	// determine ghost footprint for pending/moving food
 	var ghostW, ghostL int
 	if w.pendingFood != nil {
-		f := rotateFood(*w.pendingFood, w.rotated)
+		f := applyRotation(*w.pendingFood, w.rotationIdx)
 		ghostW, ghostL = int(f.Width), int(f.Length)
 	} else if w.moveMode && w.movingFoodIdx >= 0 {
 		sf := placed.Stored[w.movingFoodIdx]
-		mf := rotateFood(sf.Food, w.rotated)
+		mf := applyRotation(sf.Food, w.rotationIdx)
 		ghostW, ghostL = int(mf.Width), int(mf.Length)
 	}
 
