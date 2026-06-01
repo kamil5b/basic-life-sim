@@ -1,4 +1,9 @@
-## Refine food logic
+## Room Management
+
+### Sell / Trash Item
+Right now there is no option to sell / trash any items
+
+## Food Management
 
 ### Buying food management
 Steps:
@@ -17,3 +22,9 @@ Steps:
 - Add new buyable item category: utilities. It include knife, pan, wok, etc.
 - If food placed on the kitchen utilities, it will change form (if the utilities have abilities like knife, chopper, grinder, etc.) OR it can be placed on the utilities (if the utilities is like wok, pan, etc.)
 - Cooking utilities (like pan, wok, etc) can be placed on the stove / oven / etc (that can cook things), and it will cook the food inside it.
+
+## Gameplay
+
+### Time management
+- Time have to be moving and it can be controlled by the user. Default: 1 second = 1 minute, but user can change it to 1 second = 2 minutes, or 1 second = 0.5 minute, etc. Time will affect the food spoilage, and the time of day (day / night).
+- Some activity can skip time, like sleeping, watching TV, etc. User can choose how much time to skip, and it will affect the food spoilage, and the time of day (day / night).
