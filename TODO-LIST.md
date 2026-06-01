@@ -28,3 +28,7 @@ Steps:
 ### Time management
 - Time have to be moving and it can be controlled by the user. Default: 1 second = 1 minute, but user can change it to 1 second = 2 minutes, or 1 second = 0.5 minute, etc. Time will affect the food spoilage, and the time of day (day / night).
 - Some activity can skip time, like sleeping, watching TV, etc. User can choose how much time to skip, and it will affect the food spoilage, and the time of day (day / night).
+
+### Save / Load
+- User can save the game at any time, and load it later. It will save the state of the world, including the items, food, time, etc. User can have multiple save files, and load any of them. User can also delete save files.
+- Use go/gob to save / load the game, and it will be faster than using file system. It will also allow us to save / load the game in the cloud, and share it with other users.
