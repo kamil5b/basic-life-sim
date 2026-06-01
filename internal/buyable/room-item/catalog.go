@@ -1,10 +1,10 @@
 package roomitem
 
 import (
-	"basic-life-sim/internal/buyable/room-item/appliance"
-	"basic-life-sim/internal/buyable/room-item/furniture"
-	"basic-life-sim/internal/buyable/room-item/hygiene"
-	"basic-life-sim/internal/model"
+	"github.com/kamil5b/basic-life-sim/internal/buyable/room-item/appliance"
+	"github.com/kamil5b/basic-life-sim/internal/buyable/room-item/furniture"
+	"github.com/kamil5b/basic-life-sim/internal/buyable/room-item/hygiene"
+	"github.com/kamil5b/basic-life-sim/internal/model"
 )
 
 var Appliances = []model.RoomItem{

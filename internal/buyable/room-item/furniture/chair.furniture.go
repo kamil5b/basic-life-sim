@@ -1,6 +1,6 @@
 package furniture
 
-import "basic-life-sim/internal/model"
+import "github.com/kamil5b/basic-life-sim/internal/model"
 
 var BasicChair = model.RoomItem{
 	Name:          "Basic Chair",

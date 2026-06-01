@@ -1,4 +1,4 @@
-module basic-life-sim
+module github.com/kamil5b/basic-life-sim
 
 go 1.25.0
 

@@ -1,6 +1,6 @@
 package food
 
-import "basic-life-sim/internal/model"
+import "github.com/kamil5b/basic-life-sim/internal/model"
 
 // --- Cooked results (defined first so raw foods can reference them) ---
 

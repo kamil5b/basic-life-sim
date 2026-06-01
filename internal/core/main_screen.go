@@ -1,8 +1,9 @@
 package core
 
 import (
-	"basic-life-sim/internal/model"
 	"fmt"
+
+	"github.com/kamil5b/basic-life-sim/internal/model"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"

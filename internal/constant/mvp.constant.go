@@ -1,7 +1,7 @@
 package constant
 
 import (
-	"basic-life-sim/internal/model"
+	"github.com/kamil5b/basic-life-sim/internal/model"
 )
 
 var (

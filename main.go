@@ -1,8 +1,9 @@
 package main
 
 import (
-	"basic-life-sim/internal/core"
 	"log"
+
+	"github.com/kamil5b/basic-life-sim/internal/core"
 )
 
 func main() {

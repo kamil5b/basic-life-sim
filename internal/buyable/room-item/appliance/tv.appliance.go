@@ -1,6 +1,6 @@
 package appliance
 
-import "basic-life-sim/internal/model"
+import "github.com/kamil5b/basic-life-sim/internal/model"
 
 var SmallTV = model.RoomItem{
 	Name:          "Small TV",

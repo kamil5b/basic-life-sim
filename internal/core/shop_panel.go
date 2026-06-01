@@ -1,11 +1,12 @@
 package core
 
 import (
-	buyablefood "basic-life-sim/internal/buyable/food"
-	roomitem "basic-life-sim/internal/buyable/room-item"
-	"basic-life-sim/internal/model"
 	"fmt"
 	"image/color"
+
+	buyablefood "github.com/kamil5b/basic-life-sim/internal/buyable/food"
+	roomitem "github.com/kamil5b/basic-life-sim/internal/buyable/room-item"
+	"github.com/kamil5b/basic-life-sim/internal/model"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
