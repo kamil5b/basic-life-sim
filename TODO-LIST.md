@@ -1,0 +1,19 @@
+## Refine food logic
+
+### Buying food management
+Steps:
+- Buy food
+- Place anywhere on the world, it will take up 1 Z (the lowest it can get, if there is no item then 0, if there is item, stack it)
+- If place on the fridge, it will be stored in the fridge, and it will take up space in the fridge, and user have to organize the food inside the fridge like you organize placable item inside your room. The dimension of the fridge is defined in entity.
+- Food in fridge will spoil longer
+- Food in fridge in the cold area will spoil even longer
+
+### Food Logistics
+- Food that inside fridge can be take out and have to be placed somewhere else, it will spoil faster than if it is in the fridge, but it will still spoil slower than food that is not in the fridge (minimum, today)
+- Food that is not in the fridge can be moved around
+- If food placed on top of another food, it will stack and become a different item. But with permission, user can choose wether to mix it or not, if not then user will have to put it somewhere else, if yes then it will become a different item.
+
+### Cooking logic
+- Add new buyable item category: utilities. It include knife, pan, wok, etc.
+- If food placed on the kitchen utilities, it will change form (if the utilities have abilities like knife, chopper, grinder, etc.) OR it can be placed on the utilities (if the utilities is like wok, pan, etc.)
+- Cooking utilities (like pan, wok, etc) can be placed on the stove, and it will cook the food inside it.
