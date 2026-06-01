@@ -20,33 +20,72 @@ type roomPanel struct {
 	selCell   [2]int // clicked cell for filtering; [-1,-1] = no filter active
 
 	// selected item (in filtered or action mode)
-	selItem int // index into RoomItems, -1 = none
-	selAct  int
+	selItem      int // index into RoomItems, -1 = none
+	selFloorFood int // index into FloorFood, -1 = none
+	selAct       int
 
-	mode      rpMode
-	wizard    *placementWizard
+	mode   rpMode
+	wizard *placementWizard
+
+	// fridge organizer state
 	fridgeWiz *fridgeWizard
+
+	// floor food move state
+	floorMoveMode           bool // true = waiting for user to click target cell
+	floorFoodFridgeTarget   int  // RoomItems index of fridge being targeted (-1 = none)
+	floorFoodFridgeTargetXY [2]int
 }
 
 type rpMode int
 
 const (
-	rpModeList     rpMode = iota // full list, hover highlights on grid
-	rpModeFiltered               // cell clicked — show only items stacked there
-	rpModeAction                 // action picker for a selected item
-	rpModeMoveGrid               // picking new X,Y for an item
-	rpModeMoveZ                  // picking new Z
-	rpModeMoveDir                // picking new direction
+	rpModeList                  rpMode = iota // full list, hover highlights on grid
+	rpModeFiltered                            // cell clicked — show only items stacked there
+	rpModeAction                              // action picker for a selected item
+	rpModeMoveGrid                            // picking new X,Y for an item
+	rpModeMoveZ                               // picking new Z
+	rpModeMoveDir                             // picking new direction
+	rpModeFridgeGrid                          // organising food inside a fridge (unused — handled by fridgeWiz)
+	rpModeFloorFoodAction                     // action picker for a selected floor food item
+	rpModeFloorFoodFridgeChoice               // "In World" vs "In Fridge" when dropping food onto a fridge cell
 )
 
 func newRoomPanel(char *model.Character, main *mainScreen) *roomPanel {
 	return &roomPanel{
-		char:      char,
-		main:      main,
-		selItem:   -1,
-		hoverCell: [2]int{-1, -1},
-		selCell:   [2]int{-1, -1},
+		char:                  char,
+		main:                  main,
+		selItem:               -1,
+		selFloorFood:          -1,
+		hoverCell:             [2]int{-1, -1},
+		selCell:               [2]int{-1, -1},
+		floorFoodFridgeTarget: -1,
 	}
+}
+
+// fridgeAtCell returns the RoomItems index of a storage item whose footprint covers (gx,gy), or -1.
+func (p *roomPanel) fridgeAtCell(gx, gy int) int {
+	for i, placed := range p.char.CurrentHome.RoomItems {
+		if placed.Item.Storage == nil {
+			continue
+		}
+		for _, cell := range occupiedCells(placed.X, placed.Y, placed.Item, placed.Direction) {
+			if int(cell[0]) == gx && int(cell[1]) == gy {
+				return i
+			}
+		}
+	}
+	return -1
+}
+
+// floorFoodAtCell returns the indices (into FloorFood) of food items at grid cell (gx,gy).
+func (p *roomPanel) floorFoodAtCell(gx, gy int) []int {
+	var out []int
+	for i, ff := range p.char.CurrentHome.FloorFood {
+		if int(ff.X) == gx && int(ff.Y) == gy {
+			out = append(out, i)
+		}
+	}
+	return out
 }
 
 // itemsAtCell returns the indices (into RoomItems) of items that occupy the grid cell (gx,gy)
@@ -102,9 +141,11 @@ func (p *roomPanel) update() {
 		if clicked {
 			if gx >= 0 {
 				stacked := p.itemsAtCell(gx, gy)
-				if len(stacked) > 0 {
+				floorFood := p.floorFoodAtCell(gx, gy)
+				if len(stacked) > 0 || len(floorFood) > 0 {
 					p.selCell = [2]int{gx, gy}
 					p.selItem = -1
+					p.selFloorFood = -1
 					p.mode = rpModeFiltered
 					return
 				}
@@ -118,6 +159,7 @@ func (p *roomPanel) update() {
 			p.mode = rpModeList
 			p.selCell = [2]int{-1, -1}
 			p.selItem = -1
+			p.selFloorFood = -1
 			return
 		}
 
@@ -129,6 +171,19 @@ func (p *roomPanel) update() {
 				p.selItem = itemIdx
 				p.selAct = 0
 				p.mode = rpModeAction
+				return
+			}
+		}
+		// Floor food rows appear below room-item rows
+		floorFood := p.floorFoodAtCell(p.selCell[0], p.selCell[1])
+		baseRow := len(stacked)
+		for li, ffIdx := range floorFood {
+			rx, ry, rw, rh := rpItemRowRect(baseRow + li)
+			ry += 20
+			if clicked && isHovered(mx, my, rx, ry, rw, rh) {
+				p.selFloorFood = ffIdx
+				p.floorMoveMode = false
+				p.mode = rpModeFloorFoodAction
 				return
 			}
 		}
@@ -183,7 +238,7 @@ func (p *roomPanel) update() {
 				p.fridgeWiz = newFridgeWizard(
 					p.char, p.selItem,
 					rpGridX, rpGridY+20, rpListX,
-					nil,
+					nil, false,
 					p.main.setMessage,
 					func() { p.fridgeWiz = nil },
 					func() { p.fridgeWiz = nil },
@@ -198,6 +253,151 @@ func (p *roomPanel) update() {
 				p.selAct = i
 				p.executeAction(placed, act)
 			}
+		}
+
+	case rpModeFloorFoodAction:
+		if p.selFloorFood < 0 || p.selFloorFood >= len(p.char.CurrentHome.FloorFood) {
+			p.mode = rpModeFiltered
+			return
+		}
+		ff := &p.char.CurrentHome.FloorFood[p.selFloorFood]
+
+		// Back
+		bx, by, bw, bh := rpBackBtnRect()
+		if clicked && isHovered(mx, my, bx, by, bw, bh) {
+			p.floorMoveMode = false
+			p.mode = rpModeFiltered
+			return
+		}
+
+		// Eat
+		eax, eay, eaw, eah := rpFloorFoodEatBtnRect()
+		if clicked && isHovered(mx, my, eax, eay, eaw, eah) && !p.floorMoveMode {
+			char := p.char
+			if model.IsExpired(ff.PurchaseDate, ff.Food.BaseExpiryDays, 1, char.CurrentDate) {
+				foodExpiredPenalty(char)
+				p.main.setMessage(fmt.Sprintf("%s was EXPIRED — all stats -10!", ff.Food.Name))
+			} else if ff.Food.EatAction == nil {
+				rawFoodPenalty(char)
+				p.main.setMessage(fmt.Sprintf("Eating raw %s penalised stats -5.", ff.Food.Name))
+			} else {
+				ff.Food.EatAction(&char.CurrentStats, char)
+				p.main.setMessage(fmt.Sprintf("Ate %s.", ff.Food.Name))
+			}
+			consumeUse(char, "floor", 0, p.selFloorFood)
+			p.selFloorFood = -1
+			p.mode = rpModeFiltered
+			return
+		}
+
+		// Move: toggle waiting-for-click mode
+		mmx, mmy, mmw, mmh := rpFloorFoodMoveBtnRect()
+		if clicked && isHovered(mx, my, mmx, mmy, mmw, mmh) {
+			p.floorMoveMode = !p.floorMoveMode
+			if p.floorMoveMode {
+				p.main.setMessage("Click a floor cell to move the food there.")
+			}
+			return
+		}
+
+		// Trash
+		tx, ty, tw, th := rpFloorFoodTrashBtnRect()
+		if clicked && isHovered(mx, my, tx, ty, tw, th) && !p.floorMoveMode {
+			name := ff.Food.Name
+			p.char.CurrentHome.FloorFood = append(
+				p.char.CurrentHome.FloorFood[:p.selFloorFood],
+				p.char.CurrentHome.FloorFood[p.selFloorFood+1:]...)
+			p.main.setMessage(fmt.Sprintf("Trashed %s.", name))
+			p.selFloorFood = -1
+			p.mode = rpModeFiltered
+			return
+		}
+
+		// Grid click while in move mode
+		if p.floorMoveMode && clicked {
+			gx, gy := p.gridCellAt(mx, my)
+			if gx >= 0 {
+				fridgeIdx := p.fridgeAtCell(gx, gy)
+				if fridgeIdx >= 0 {
+					// Dropped onto a fridge — ask In World or In Fridge
+					p.floorFoodFridgeTarget = fridgeIdx
+					p.floorFoodFridgeTargetXY = [2]int{gx, gy}
+					p.floorMoveMode = false
+					p.mode = rpModeFloorFoodFridgeChoice
+				} else {
+					ff.X = uint8(gx)
+					ff.Y = uint8(gy)
+					p.selCell = [2]int{gx, gy}
+					p.main.setMessage(fmt.Sprintf("Moved %s to (%d,%d).", ff.Food.Name, gx, gy))
+					p.floorMoveMode = false
+				}
+			}
+		}
+
+	case rpModeFloorFoodFridgeChoice:
+		if p.selFloorFood < 0 || p.floorFoodFridgeTarget < 0 {
+			p.mode = rpModeFloorFoodAction
+			return
+		}
+		ff := &p.char.CurrentHome.FloorFood[p.selFloorFood]
+		fridgePlaced := p.char.CurrentHome.RoomItems[p.floorFoodFridgeTarget]
+
+		// Back
+		bx, by, bw, bh := rpBackBtnRect()
+		if clicked && isHovered(mx, my, bx, by, bw, bh) {
+			p.floorFoodFridgeTarget = -1
+			p.mode = rpModeFloorFoodAction
+			return
+		}
+
+		// In World: place on top of the fridge
+		iwx, iwy, iww, iwh := rpChoiceInWorldBtnRect()
+		if clicked && isHovered(mx, my, iwx, iwy, iww, iwh) {
+			topZ := fridgePlaced.Z + fridgePlaced.Item.Height
+			ff.X = uint8(p.floorFoodFridgeTargetXY[0])
+			ff.Y = uint8(p.floorFoodFridgeTargetXY[1])
+			ff.Z = topZ
+			p.selCell = p.floorFoodFridgeTargetXY
+			p.main.setMessage(fmt.Sprintf("Placed %s on top of %s (z=%d).", ff.Food.Name, fridgePlaced.Item.Name, topZ))
+			p.floorFoodFridgeTarget = -1
+			p.selFloorFood = -1
+			p.mode = rpModeFiltered
+			return
+		}
+
+		// In Fridge: open fridge wizard
+		ifx, ify, ifw, ifh := rpChoiceInFridgeBtnRect()
+		if clicked && isHovered(mx, my, ifx, ify, ifw, ifh) {
+			storage := fridgePlaced.Item.Storage
+			if storage.TotalSlots() <= usedSlotCount(&p.char.CurrentHome.RoomItems[p.floorFoodFridgeTarget]) {
+				p.main.setMessage("Fridge is full!")
+				return
+			}
+			ffCopy := ff.Food
+			ffIdx := p.selFloorFood
+			fridgeIdx := p.floorFoodFridgeTarget
+			p.fridgeWiz = newFridgeWizard(
+				p.char, fridgeIdx,
+				rpGridX, rpGridY+20, rpListX,
+				&ffCopy, false,
+				p.main.setMessage,
+				func() {
+					// Cancelled — stay in choice
+					p.fridgeWiz = nil
+				},
+				func() {
+					// Placed in fridge — remove from floor
+					p.char.CurrentHome.FloorFood = append(
+						p.char.CurrentHome.FloorFood[:ffIdx],
+						p.char.CurrentHome.FloorFood[ffIdx+1:]...)
+					p.fridgeWiz = nil
+					p.floorFoodFridgeTarget = -1
+					p.selFloorFood = -1
+					p.mode = rpModeFiltered
+				},
+			)
+			p.floorFoodFridgeTarget = -1
+			return
 		}
 
 	case rpModeMoveGrid, rpModeMoveZ, rpModeMoveDir:
@@ -517,6 +717,26 @@ func rpOrganizeBtnRect() (x, y, w, h float32) {
 	return rpListX + 412, panelY + float32(ScreenH) - float32(tabH) - 50, 100, 32
 }
 
+func rpFloorFoodEatBtnRect() (x, y, w, h float32) {
+	return rpListX + 108, panelY + float32(ScreenH) - float32(tabH) - 50, 80, 32
+}
+
+func rpFloorFoodMoveBtnRect() (x, y, w, h float32) {
+	return rpListX + 196, panelY + float32(ScreenH) - float32(tabH) - 50, 90, 32
+}
+
+func rpFloorFoodTrashBtnRect() (x, y, w, h float32) {
+	return rpListX + 294, panelY + float32(ScreenH) - float32(tabH) - 50, 80, 32
+}
+
+func rpChoiceInWorldBtnRect() (x, y, w, h float32) {
+	return rpListX, panelY + 120, 200, 48
+}
+
+func rpChoiceInFridgeBtnRect() (x, y, w, h float32) {
+	return rpListX, panelY + 180, 200, 48
+}
+
 // ── draw ──────────────────────────────────────────────────────────────────────
 
 func (p *roomPanel) draw(dst *ebiten.Image) {
@@ -575,7 +795,9 @@ func (p *roomPanel) draw(dst *ebiten.Image) {
 
 	case rpModeFiltered:
 		stacked := p.itemsAtCell(p.selCell[0], p.selCell[1])
-		drawText(dst, fmt.Sprintf("Cell (%d,%d) — %d item(s)", p.selCell[0], p.selCell[1], len(stacked)),
+		floorFood := p.floorFoodAtCell(p.selCell[0], p.selCell[1])
+		total := len(stacked) + len(floorFood)
+		drawText(dst, fmt.Sprintf("Cell (%d,%d) — %d item(s)", p.selCell[0], p.selCell[1], total),
 			float64(rpListX), float64(panelY)+4, fontS, colorAccent)
 		for li, itemIdx := range stacked {
 			placed := char.CurrentHome.RoomItems[itemIdx]
@@ -590,6 +812,30 @@ func (p *roomPanel) draw(dst *ebiten.Image) {
 			strokeRect(dst, rx, ry, rw, rh, colorBorder)
 			label := fmt.Sprintf("%s  z=%d %s", placed.Item.Name, placed.Z, dirName(placed.Direction))
 			drawText(dst, label, float64(rx)+6, float64(ry)+6, fontS, colorText)
+		}
+		// Floor food rows
+		baseRow := len(stacked)
+		for li, ffIdx := range floorFood {
+			ff := char.CurrentHome.FloorFood[ffIdx]
+			rx, ry, rw, rh := rpItemRowRect(baseRow + li)
+			ry += 20
+			hov := isHovered(mx, my, rx, ry, rw, rh)
+			bg := colorPanel
+			if hov {
+				bg = colorHighlight
+			}
+			fillRect(dst, rx, ry, rw, rh, bg)
+			strokeRect(dst, rx, ry, rw, rh, colorBorder)
+			exp := model.IsExpired(ff.PurchaseDate, ff.Food.BaseExpiryDays, 1, char.CurrentDate)
+			tc := colorFoodFloor
+			if exp {
+				tc = colorRed
+			}
+			label := fmt.Sprintf("🍞 %s  uses:%d  z=%d", ff.Food.Name, ff.UsesRemaining, ff.Z)
+			if exp {
+				label += " [EXPIRED]"
+			}
+			drawText(dst, label, float64(rx)+6, float64(ry)+6, fontS, tc)
 		}
 		bx, by, bw, bh := rpBackBtnRect()
 		drawButton(dst, "← Back", bx, by, bw, bh, fontS, isHovered(mx, my, bx, by, bw, bh), true)
@@ -663,6 +909,79 @@ func (p *roomPanel) draw(dst *ebiten.Image) {
 			obx, oby, obw, obh := rpOrganizeBtnRect()
 			drawButton(dst, "📦 Organize", obx, oby, obw, obh, fontS, isHovered(mx, my, obx, oby, obw, obh), true)
 		}
+
+	case rpModeFloorFoodAction:
+		if p.selFloorFood < 0 || p.selFloorFood >= len(char.CurrentHome.FloorFood) {
+			return
+		}
+		ff := char.CurrentHome.FloorFood[p.selFloorFood]
+		exp := model.IsExpired(ff.PurchaseDate, ff.Food.BaseExpiryDays, 1, char.CurrentDate)
+		expiry := model.ExpiryDate(ff.PurchaseDate, ff.Food.BaseExpiryDays, 1)
+		ey, em, ed := expiry.Unpack()
+		headCol := colorFoodFloor
+		if exp {
+			headCol = colorRed
+		}
+		drawText(dst, ff.Food.Name, float64(rpListX), float64(panelY)+4, fontM, headCol)
+		drawText(dst, fmt.Sprintf("at (%d,%d,z=%d)  uses:%d", ff.X, ff.Y, ff.Z, ff.UsesRemaining),
+			float64(rpListX), float64(panelY)+26, fontS, colorMuted)
+		expTag := fmt.Sprintf("Expires: %04d-%02d-%02d", ey, em, ed)
+		if exp {
+			expTag = fmt.Sprintf("EXPIRED %04d-%02d-%02d", ey, em, ed)
+		}
+		drawText(dst, expTag, float64(rpListX), float64(panelY)+44, fontS, headCol)
+		if ff.Food.EatAction == nil {
+			drawText(dst, "[raw / inedible — eating will penalise stats]", float64(rpListX), float64(panelY)+62, fontS, colorYellow)
+		}
+		if p.floorMoveMode {
+			drawText(dst, "→ Click a floor cell to place food there", float64(rpListX), float64(panelY)+82, fontS, colorYellow)
+		}
+
+		bx, by, bw, bh := rpBackBtnRect()
+		drawButton(dst, "← Back", bx, by, bw, bh, fontS, isHovered(mx, my, bx, by, bw, bh), true)
+		eax, eay, eaw, eah := rpFloorFoodEatBtnRect()
+		drawButton(dst, "Eat", eax, eay, eaw, eah, fontS, isHovered(mx, my, eax, eay, eaw, eah) && !p.floorMoveMode, !p.floorMoveMode)
+		mmx, mmy, mmw, mmh := rpFloorFoodMoveBtnRect()
+		moveLabel := "✦ Move"
+		if p.floorMoveMode {
+			moveLabel = "✦ Cancel"
+		}
+		drawButton(dst, moveLabel, mmx, mmy, mmw, mmh, fontS, isHovered(mx, my, mmx, mmy, mmw, mmh), true)
+		tx, ty, tw, th := rpFloorFoodTrashBtnRect()
+		drawButton(dst, "Trash", tx, ty, tw, th, fontS, isHovered(mx, my, tx, ty, tw, th) && !p.floorMoveMode, !p.floorMoveMode)
+
+	case rpModeFloorFoodFridgeChoice:
+		if p.selFloorFood < 0 || p.floorFoodFridgeTarget < 0 ||
+			p.selFloorFood >= len(char.CurrentHome.FloorFood) ||
+			p.floorFoodFridgeTarget >= len(char.CurrentHome.RoomItems) {
+			return
+		}
+		ff2 := char.CurrentHome.FloorFood[p.selFloorFood]
+		fridgePlaced := char.CurrentHome.RoomItems[p.floorFoodFridgeTarget]
+		topZ := fridgePlaced.Z + fridgePlaced.Item.Height
+
+		drawText(dst, "Where to put "+ff2.Food.Name+"?", float64(rpListX), float64(panelY)+12, fontM, colorAccent)
+		drawText(dst, fmt.Sprintf("Dropping onto: %s at (%d,%d)",
+			fridgePlaced.Item.Name, p.floorFoodFridgeTargetXY[0], p.floorFoodFridgeTargetXY[1]),
+			float64(rpListX), float64(panelY)+36, fontS, colorMuted)
+		drawText(dst, fmt.Sprintf("In World: places on top of fridge at z=%d", topZ),
+			float64(rpListX), float64(panelY)+100, fontS, colorMuted)
+		drawText(dst, fmt.Sprintf("In Fridge: store inside (%d/%d slots used)",
+			usedSlotCount(&char.CurrentHome.RoomItems[p.floorFoodFridgeTarget]),
+			fridgePlaced.Item.Storage.TotalSlots()),
+			float64(rpListX), float64(panelY)+162, fontS, colorMuted)
+
+		iwx, iwy, iww, iwh := rpChoiceInWorldBtnRect()
+		drawButton(dst, "📦 In World (on top)", iwx, iwy, iww, iwh, fontM, isHovered(mx, my, iwx, iwy, iww, iwh), true)
+		ifx, ify, ifw, ifh := rpChoiceInFridgeBtnRect()
+		fridgeFull := fridgePlaced.Item.Storage.TotalSlots() <= usedSlotCount(&char.CurrentHome.RoomItems[p.floorFoodFridgeTarget])
+		drawButton(dst, "❄ In Fridge", ifx, ify, ifw, ifh, fontM, isHovered(mx, my, ifx, ify, ifw, ifh) && !fridgeFull, !fridgeFull)
+		if fridgeFull {
+			drawText(dst, "(fridge is full)", float64(ifx)+float64(ifw)+8, float64(ify)+14, fontS, colorRed)
+		}
+
+		bx, by, bw, bh := rpBackBtnRect()
+		drawButton(dst, "← Back", bx, by, bw, bh, fontS, isHovered(mx, my, bx, by, bw, bh), true)
 
 	case rpModeMoveGrid:
 		drawText(dst, "Step 1: Click cell to move item", float64(rpListX), float64(panelY)+8, fontS, colorMuted)

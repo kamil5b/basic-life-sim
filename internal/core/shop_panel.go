@@ -301,7 +301,7 @@ func (p *shopPanel) finalizeFoodPlace() {
 		p.fridgeWiz = newFridgeWizard(
 			char, fridgeAt,
 			spGridOriginX(), spGridOriginY(), panelX+8,
-			&f,
+			&f, true,
 			p.main.setMessage,
 			func() {
 				p.fridgeWiz = nil

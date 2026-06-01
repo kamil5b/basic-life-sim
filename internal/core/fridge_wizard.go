@@ -32,6 +32,7 @@ type fridgeWizard struct {
 
 	// shop context: food pending purchase (nil = room context)
 	pendingFood *model.Food
+	chargeMoney bool // true = deduct BasePrice on place (shop); false = already owned (floor→fridge)
 
 	// pixel origin of the fridge grid (right area of the panel)
 	gridX, gridY float32
@@ -49,6 +50,7 @@ func newFridgeWizard(
 	fridgeIdx int,
 	gridX, gridY, infoX float32,
 	pendingFood *model.Food,
+	chargeMoney bool,
 	setMsg func(string),
 	onCancel func(),
 	onDone func(),
@@ -61,6 +63,7 @@ func newFridgeWizard(
 		selSlotY:      -1,
 		movingFoodIdx: -1,
 		pendingFood:   pendingFood,
+		chargeMoney:   chargeMoney,
 		gridX:         gridX,
 		gridY:         gridY,
 		infoX:         infoX,
@@ -68,6 +71,23 @@ func newFridgeWizard(
 		onCancel:      onCancel,
 		onDone:        onDone,
 	}
+}
+
+// hasFoodOnTop returns true if any floor food is sitting on top of this fridge
+// (at the same footprint cells, at or above the fridge's top Z).
+func (w *fridgeWizard) hasFoodOnTop() bool {
+	placed := w.char.CurrentHome.RoomItems[w.fridgeIdx]
+	topZ := placed.Z + placed.Item.Height
+	footprint := make(map[[2]uint8]bool)
+	for _, c := range occupiedCells(placed.X, placed.Y, placed.Item, placed.Direction) {
+		footprint[c] = true
+	}
+	for _, ff := range w.char.CurrentHome.FloorFood {
+		if footprint[[2]uint8{ff.X, ff.Y}] && ff.Z >= topZ {
+			return true
+		}
+	}
+	return false
 }
 
 // ── button layout ─────────────────────────────────────────────────────────────
@@ -159,7 +179,9 @@ func (w *fridgeWizard) update() bool {
 				occupied := occupiedFoodSlots(placed)
 				if canFitFood(occupied, storage, f, slotX, slotY, w.currentZ) {
 					mult := storage.MultiplierAt(slotX, slotY, w.currentZ)
-					w.char.CurrentStats.Money -= f.BasePrice
+					if w.chargeMoney {
+						w.char.CurrentStats.Money -= f.BasePrice
+					}
 					placed.Stored = append(placed.Stored, model.StoredFood{
 						SlotX: slotX, SlotY: slotY, SlotZ: w.currentZ,
 						PurchaseDate:   w.char.CurrentDate,
@@ -184,6 +206,10 @@ func (w *fridgeWizard) update() bool {
 			// Take Out
 			a1x, a1y, a1w, a1h := w.action1BtnRect()
 			if isHovered(mx, my, a1x, a1y, a1w, a1h) {
+				if w.hasFoodOnTop() {
+					w.setMsg("Can't take out — there is food on top of the fridge. Remove it first.")
+					return false
+				}
 				foodIdx := w.findFoodAtSel(placed)
 				if foodIdx >= 0 {
 					s := placed.Stored[foodIdx]
@@ -338,8 +364,12 @@ func (w *fridgeWizard) draw(dst *ebiten.Image) {
 				}
 				// Take Out
 				a1x, a1y, a1w, a1h := w.action1BtnRect()
-				takeEnabled := !w.moveMode
-				drawButton(dst, "Take Out", a1x, a1y, a1w, a1h, fontS,
+				takeEnabled := !w.moveMode && !w.hasFoodOnTop()
+				takeLabel := "Take Out"
+				if w.hasFoodOnTop() {
+					takeLabel = "Take Out (blocked)"
+				}
+				drawButton(dst, takeLabel, a1x, a1y, a1w, a1h, fontS,
 					isHovered(mx, my, a1x, a1y, a1w, a1h) && takeEnabled, takeEnabled)
 				// Move
 				a2x, a2y, a2w, a2h := w.action2BtnRect()
