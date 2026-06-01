@@ -101,12 +101,32 @@ func canPlaceOnGrid(home model.Home, item model.RoomItem, x, y uint8) error {
 		if !valid {
 			continue
 		}
-		// Check direct footprint overlap with existing items.
 		newCells := occupiedCells(x, y, item, dir)
 		newCellSet := make(map[[2]uint8]bool, len(newCells))
 		for _, c := range newCells {
 			newCellSet[c] = true
 		}
+
+		// Check if there's an item the new item can stack directly on top of
+		// (anchor XY overlap, new item's z == existing item's z+height).
+		// If so, this cell is valid regardless of ground-level collision.
+		canStack := false
+		for _, placed := range home.RoomItems {
+			stackZ := placed.Z + placed.Item.Height
+			if stackZ == 0 {
+				continue
+			}
+			placedCells := occupiedCells(placed.X, placed.Y, placed.Item, placed.Direction)
+			if footprintsOverlap(newCells, placedCells) {
+				canStack = true
+				break
+			}
+		}
+		if canStack {
+			return nil
+		}
+
+		// Ground-level placement: check overlap and clearance at z=0.
 		blocked := false
 		for _, placed := range home.RoomItems {
 			if !zRangeOverlaps(0, item.Height, placed.Z, placed.Item.Height) {
@@ -231,11 +251,33 @@ func canPlace(home model.Home, item model.RoomItem, x, y, z uint8, dir model.Dir
 			}
 		}
 	}
-	// Door clearance check.
-	doorClear := doorClearanceCells(layout)
-	for _, cell := range newCells {
-		if doorClear[cell] {
-			return fmt.Errorf("position (%d,%d) blocks door clearance", cell[0], cell[1])
+	// If z > 0, direction must match the item directly below (same footprint, z == below.Z+below.Height).
+	if z > 0 {
+		foundBelow := false
+		for _, placed := range home.RoomItems {
+			if placed.Z+placed.Item.Height != z {
+				continue
+			}
+			below := occupiedCells(placed.X, placed.Y, placed.Item, placed.Direction)
+			if footprintsOverlap(newCells, below) {
+				if dir != placed.Direction {
+					return fmt.Errorf("stacked item must face the same direction as the item below (%s)", dirName(placed.Direction))
+				}
+				foundBelow = true
+				break
+			}
+		}
+		if !foundBelow {
+			return fmt.Errorf("no supporting item directly below at z=%d", z)
+		}
+	}
+	// Door clearance check — only at ground level.
+	if z == 0 {
+		doorClear := doorClearanceCells(layout)
+		for _, cell := range newCells {
+			if doorClear[cell] {
+				return fmt.Errorf("position (%d,%d) blocks door clearance", cell[0], cell[1])
+			}
 		}
 	}
 	return nil

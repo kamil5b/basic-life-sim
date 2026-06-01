@@ -180,7 +180,23 @@ func (w *placementWizard) dirFacesWall(dir model.Direction) bool {
 	return false
 }
 
-// update processes mouse input for the current step.
+// dirOfItemBelow returns the direction of the item directly below (z == w.z, top == w.z).
+// Falls back to North if none found.
+func (w *placementWizard) dirOfItemBelow() model.Direction {
+	home := w.char.CurrentHome
+	newCells := occupiedCells(w.x, w.y, *w.item, w.dir)
+	for _, placed := range home.RoomItems {
+		if placed.Z+placed.Item.Height != w.z {
+			continue
+		}
+		below := occupiedCells(placed.X, placed.Y, placed.Item, placed.Direction)
+		if footprintsOverlap(newCells, below) {
+			return placed.Direction
+		}
+	}
+	return model.North
+}
+
 // Returns true if the wizard is fully done (finalized or cancelled).
 func (w *placementWizard) update() bool {
 	mx, my := ebiten.CursorPosition()
@@ -225,11 +241,22 @@ func (w *placementWizard) update() bool {
 		maxZ := w.maxZ()
 		if clicked {
 			mh := int(w.char.CurrentHome.Type.MaxHeight)
+			// Precompute supported Z levels.
+			supportedZ := make(map[uint8]bool)
+			for _, placed := range w.char.CurrentHome.RoomItems {
+				topZ := placed.Z + placed.Item.Height
+				below := occupiedCells(placed.X, placed.Y, placed.Item, placed.Direction)
+				newCells := occupiedCells(w.x, w.y, *w.item, w.dir)
+				if footprintsOverlap(newCells, below) {
+					supportedZ[topZ] = true
+				}
+			}
 			for z := 0; z < mh; z++ {
 				cx2, cy2, cw, ch := spZCellRect(z, mh)
 				if isHovered(mx, my, cx2, cy2, cw, ch) {
 					candidate := uint8(z)
-					if candidate <= maxZ {
+					validAnchor := w.item.CanOverhang || candidate == 0 || supportedZ[candidate]
+					if validAnchor && candidate <= maxZ {
 						w.z = candidate
 					}
 					break
@@ -238,6 +265,16 @@ func (w *placementWizard) update() bool {
 			zbx, zby, zbw, zbh := spZConfirmBtnRect()
 			if isHovered(mx, my, zbx, zby, zbw, zbh) {
 				w.err = ""
+				if w.z > 0 {
+					// Direction is locked to the item below — skip dir step.
+					dir := w.dirOfItemBelow()
+					w.dir = dir
+					if err := w.onFinalize(w.x, w.y, w.z, dir); err != nil {
+						w.err = err.Error()
+						w.curStep = pwStepGrid
+					}
+					return true
+				}
 				w.curStep = pwStepDir
 			}
 		}
@@ -282,10 +319,23 @@ func (w *placementWizard) drawLeftPanel(dst *ebiten.Image, mx, my int) {
 		drawText(dst, fmt.Sprintf("pos (%d,%d)", w.x, w.y), lx, float64(panelY)+66, fontS, colorMuted)
 
 		labelX := float64(zColX) + float64(zCellW) + 8
+		// Precompute which Z levels have a supporting item directly below.
+		supportedZ := make(map[int]bool)
+		for _, placed := range w.char.CurrentHome.RoomItems {
+			topZ := int(placed.Z + placed.Item.Height)
+			if topZ > mh {
+				continue
+			}
+			below := occupiedCells(placed.X, placed.Y, placed.Item, placed.Direction)
+			newCells := occupiedCells(w.x, w.y, *w.item, w.dir)
+			if footprintsOverlap(newCells, below) {
+				supportedZ[topZ] = true
+			}
+		}
 		for z := mh - 1; z >= 0; z-- {
 			cx2, cy2, cw, ch := spZCellRect(z, mh)
 			occ := z >= selZ && z < selZ+itemH
-			validAnchor := canOverhang || z == 0
+			validAnchor := canOverhang || z == 0 || supportedZ[z]
 			clickable := validAnchor && uint8(z) <= uint8(maxZ)
 
 			var bg color.RGBA
