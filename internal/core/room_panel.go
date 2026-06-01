@@ -183,12 +183,18 @@ func (p *roomPanel) finalizeMove(x, y, z uint8, dir model.Direction) error {
 		return nil
 	}
 	home := &p.char.CurrentHome
-	placed := &home.RoomItems[p.selItem]
-	item := placed.Item
+	item := home.RoomItems[p.selItem].Item
 
-	// Temporarily remove self for clean canPlace check
-	saved := home.RoomItems[p.selItem]
-	home.RoomItems = append(home.RoomItems[:p.selItem], home.RoomItems[p.selItem+1:]...)
+	// Collect stack: items riding on top of the moved item (same XY footprint overlap, Z immediately above), recursively.
+	stack := p.collectStack(p.selItem)
+
+	// Temporarily remove the whole stack for a clean canPlace check.
+	// Work highest index first so removals don't shift lower indices.
+	saved := make([]model.PlacedRoomItem, len(stack))
+	for i, idx := range stack {
+		saved[i] = home.RoomItems[idx]
+	}
+	p.removeIndices(stack)
 
 	finalZ := z
 	if !item.CanOverhang {
@@ -196,26 +202,104 @@ func (p *roomPanel) finalizeMove(x, y, z uint8, dir model.Direction) error {
 	}
 
 	if err := canPlace(*home, item, x, y, finalZ, dir); err != nil {
-		// Restore
-		home.RoomItems = append(home.RoomItems[:p.selItem], append([]model.PlacedRoomItem{saved}, home.RoomItems[p.selItem:]...)...)
+		// Restore everything back
+		home.RoomItems = append(home.RoomItems, saved...)
 		return err
 	}
 
-	saved.X = x
-	saved.Y = y
-	saved.Z = finalZ
-	saved.Direction = dir
+	// Place the moved item.
+	base := saved[0]
+	oldX, oldY, oldZ := base.X, base.Y, base.Z
+	deltaZ := int(finalZ) - int(oldZ)
+	base.X = x
+	base.Y = y
+	base.Z = finalZ
+	base.Direction = dir
+	home.RoomItems = append(home.RoomItems, base)
 
-	home.RoomItems = append(home.RoomItems[:p.selItem], append([]model.PlacedRoomItem{saved}, home.RoomItems[p.selItem:]...)...)
+	// Re-place stacked items at the new position, shifted by the same delta.
+	for _, s := range saved[1:] {
+		s.X = x + (s.X - oldX)
+		s.Y = y + (s.Y - oldY)
+		newZ := int(s.Z) + deltaZ
+		if newZ < 0 {
+			newZ = 0
+		}
+		s.Z = uint8(newZ)
+		home.RoomItems = append(home.RoomItems, s)
+	}
 
-	// Drop any non-overhang items that no longer have support (their Z > dropZ)
-	p.applyGravity()
+	// Update selItem to point to the newly appended base item.
+	p.selItem = len(home.RoomItems) - len(saved)
 
-	p.main.setMessage(fmt.Sprintf("Moved %s to (%d,%d,z=%d) facing %s", item.Name, x, y, finalZ, dirName(dir)))
+	p.main.setMessage(fmt.Sprintf("Moved %s (+%d stacked) to (%d,%d,z=%d) facing %s",
+		item.Name, len(saved)-1, x, y, finalZ, dirName(dir)))
 	p.selCell = [2]int{int(x), int(y)}
 	p.wizard = nil
 	p.mode = rpModeFiltered
 	return nil
+}
+
+// collectStack returns the indices of the moved item (index 0) followed by all
+// items recursively stacked on top of it, in bottom-up order.
+func (p *roomPanel) collectStack(baseIdx int) []int {
+	home := &p.char.CurrentHome
+	result := []int{baseIdx}
+	visited := map[int]bool{baseIdx: true}
+	queue := []int{baseIdx}
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+		cpl := home.RoomItems[current]
+		cTopZ := cpl.Z + cpl.Item.Height
+		cCells := occupiedCells(cpl.X, cpl.Y, cpl.Item, cpl.Direction)
+		for i, other := range home.RoomItems {
+			if visited[i] {
+				continue
+			}
+			// other sits directly on top if its Z == cTopZ and footprints overlap.
+			if other.Z != cTopZ {
+				continue
+			}
+			oCells := occupiedCells(other.X, other.Y, other.Item, other.Direction)
+			if footprintsOverlap(cCells, oCells) {
+				visited[i] = true
+				result = append(result, i)
+				queue = append(queue, i)
+			}
+		}
+	}
+	return result
+}
+
+// footprintsOverlap returns true if two cell lists share at least one cell.
+func footprintsOverlap(a, b [][2]uint8) bool {
+	set := make(map[[2]uint8]bool, len(a))
+	for _, c := range a {
+		set[c] = true
+	}
+	for _, c := range b {
+		if set[c] {
+			return true
+		}
+	}
+	return false
+}
+
+// removeIndices removes items at the given indices (must be sorted descending or we sort here).
+func (p *roomPanel) removeIndices(indices []int) {
+	home := &p.char.CurrentHome
+	// Sort descending so removals don't shift subsequent indices.
+	for i := len(indices) - 1; i >= 0; i-- {
+		for j := i - 1; j >= 0; j-- {
+			if indices[j] < indices[i] {
+				indices[i], indices[j] = indices[j], indices[i]
+			}
+		}
+	}
+	for _, idx := range indices {
+		home.RoomItems = append(home.RoomItems[:idx], home.RoomItems[idx+1:]...)
+	}
 }
 
 // applyGravity scans all non-overhang items and drops them to their lowest valid Z.
