@@ -23,6 +23,13 @@ Steps:
 - If food placed on the kitchen utilities, it will change form (if the utilities have abilities like knife, chopper, grinder, etc.) OR it can be placed on the utilities (if the utilities is like wok, pan, etc.)
 - Cooking utilities (like pan, wok, etc) can be placed on the stove / oven / etc (that can cook things), and it will cook the food inside it.
 
+## UI
+
+### Remove Tabs
+- Home: Map of our room, and the items inside it. User can click on the item to see its details and the stacks (if its a stacks). If choosing fridge, it will show the food inside the fridge and its detail, and can be taken out.
+- User click door to go to Shop (it can be to uni / work in future).
+- Shop: List of items that can be bought, including food, utilities, placeable items. User can click on the item to see its details and buy it. User can also search for items by name or category.
+
 ## Gameplay
 
 ### Time management
