@@ -138,11 +138,12 @@ func (p *foodPanel) update() {
 			p.selIdx = -1
 			return
 		}
-		if src.food.EatAction == nil {
+		inedible := isInedible(src.food)
+		if inedible {
 			rawFoodPenalty(char)
 			p.main.setMessage(fmt.Sprintf("Eating raw %s penalised Food/Energy/Hygiene -5.", src.food.Name))
 		} else {
-			src.food.EatAction(&char.CurrentStats, char)
+			applyNutrition(char, src.food)
 			p.main.setMessage(fmt.Sprintf("Ate %s. Uses left: %d", src.food.Name, src.usesRemaining-1))
 		}
 		consumeUse(char, src.kind, src.itemIdx, src.foodIdx)
@@ -319,7 +320,7 @@ func (p *foodPanel) draw(dst *ebiten.Image) {
 			tag = "[surface-cooked]"
 		}
 		inedible := ""
-		if src.food.EatAction == nil {
+		if isInedible(src.food) {
 			inedible = " [raw/inedible]"
 		}
 		expTag := fmt.Sprintf("exp %04d-%02d-%02d (%dd left)", ey, em, ed, daysLeft)
@@ -332,7 +333,7 @@ func (p *foodPanel) draw(dst *ebiten.Image) {
 		tc := colorText
 		if exp {
 			tc = colorRed
-		} else if src.food.EatAction == nil {
+		} else if isInedible(src.food) {
 			tc = colorYellow
 		}
 		drawText(dst, label, float64(rx)+8, float64(ry)+7, fontS, tc)

@@ -376,6 +376,31 @@ func safeAdd16(v, delta uint16) uint16 {
 	return r
 }
 
+func clampAdd(v uint16, delta int16) uint16 {
+	if delta >= 0 {
+		return safeAdd16(v, uint16(delta))
+	}
+	return safeSub16(v, uint16(-delta))
+}
+
+func applyNutrition(char *model.Character, f model.Food) {
+	n := f.Nutrition
+	char.Food.Current = safeAdd16(char.Food.Current, n.Food)
+	char.Energy.Current = safeAdd16(char.Energy.Current, n.Energy)
+	char.Hygiene.Current = clampAdd(char.Hygiene.Current, n.Hygiene)
+	char.Confidence.Current = clampAdd(char.Confidence.Current, n.Confidence)
+	char.Strength.Current = safeAdd16(char.Strength.Current, n.Strength)
+	if f.OnEat != nil {
+		f.OnEat(char)
+	}
+}
+
+func isInedible(f model.Food) bool {
+	return f.Nutrition.Food == 0 && f.Nutrition.Energy == 0 &&
+		f.Nutrition.Hygiene == 0 && f.Nutrition.Confidence == 0 &&
+		f.Nutrition.Strength == 0 && f.OnEat == nil
+}
+
 func foodExpiredPenalty(char *model.Character) {
 	const pen = 10
 	char.Food.Current = safeSub16(char.Food.Current, pen)
@@ -466,4 +491,35 @@ func removeFoodEntirely(char *model.Character, kind string, itemIdx, foodIdx int
 		ri := &char.CurrentHome.RoomItems[itemIdx]
 		ri.OnSurface = append(ri.OnSurface[:foodIdx], ri.OnSurface[foodIdx+1:]...)
 	}
+}
+
+// ── Mix logic ─────────────────────────────────────────────────────────────
+
+// MixFoods checks if two foods can be combined into a recipe result.
+// Returns the result food and true if a match is found.
+func MixFoods(a, b model.Food) (*model.Food, bool) {
+	pairs := []struct {
+		src     model.Food
+		partner model.Food
+	}{{a, b}, {b, a}}
+	for _, p := range pairs {
+		for _, recipe := range p.src.MixRecipes {
+			if matchesIngredient(recipe.Ingredient, p.partner) {
+				if result, ok := model.FoodRegistry[recipe.ResultName]; ok {
+					return &result, true
+				}
+			}
+		}
+	}
+	return nil, false
+}
+
+func matchesIngredient(ing model.MixIngredient, f model.Food) bool {
+	if ing.FoodName != "" {
+		return f.Name == ing.FoodName
+	}
+	if ing.FoodType != "" {
+		return f.Type == ing.FoodType
+	}
+	return false
 }

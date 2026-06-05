@@ -277,11 +277,11 @@ func (p *roomPanel) update() {
 			if model.IsExpired(ff.PurchaseDate, ff.Food.BaseExpiryDays, 1, char.CurrentDate) {
 				foodExpiredPenalty(char)
 				p.main.setMessage(fmt.Sprintf("%s was EXPIRED — all stats -10!", ff.Food.Name))
-			} else if ff.Food.EatAction == nil {
+			} else if isInedible(ff.Food) {
 				rawFoodPenalty(char)
 				p.main.setMessage(fmt.Sprintf("Eating raw %s penalised stats -5.", ff.Food.Name))
 			} else {
-				ff.Food.EatAction(&char.CurrentStats, char)
+				applyNutrition(char, ff.Food)
 				p.main.setMessage(fmt.Sprintf("Ate %s.", ff.Food.Name))
 			}
 			consumeUse(char, "floor", 0, p.selFloorFood)
@@ -581,11 +581,14 @@ func (p *roomPanel) executeAction(placed *model.PlacedRoomItem, action string) {
 					p.main.setMessage(fmt.Sprintf("%s was EXPIRED — stat penalty applied!", s.Food.Name))
 					return
 				}
-				if s.Food.EatAction == nil {
+				inedible := s.Food.Nutrition.Food == 0 && s.Food.Nutrition.Energy == 0 &&
+					s.Food.Nutrition.Hygiene == 0 && s.Food.Nutrition.Confidence == 0 &&
+					s.Food.Nutrition.Strength == 0 && s.Food.OnEat == nil
+				if inedible {
 					rawFoodPenalty(char)
 					p.main.setMessage(fmt.Sprintf("Eating raw %s was a bad idea.", s.Food.Name))
 				} else {
-					s.Food.EatAction(&char.CurrentStats, char)
+					applyNutrition(char, s.Food)
 					p.main.setMessage(fmt.Sprintf("Ate %s from fridge. Uses left: %d", s.Food.Name, s.UsesRemaining-1))
 				}
 				consumeUse(char, "fridge", p.selItem, i)
@@ -607,12 +610,15 @@ func (p *roomPanel) executeAction(placed *model.PlacedRoomItem, action string) {
 			cooked := 0
 			for i := range placed.OnSurface {
 				sf := &placed.OnSurface[i]
-				if sf.Cooked || sf.Food.CookedResult == nil {
+				if sf.Cooked {
 					continue
 				}
-				result := *sf.Food.CookedResult
+				result := model.ResolveCookedResult(sf.Food)
+				if result == nil {
+					continue
+				}
 				result.UsesTotal = sf.Food.UsesTotal
-				sf.Food = result
+				sf.Food = *result
 				sf.Cooked = true
 				cooked++
 			}
@@ -930,7 +936,7 @@ func (p *roomPanel) draw(dst *ebiten.Image) {
 			expTag = fmt.Sprintf("EXPIRED %04d-%02d-%02d", ey, em, ed)
 		}
 		drawText(dst, expTag, float64(rpListX), float64(panelY)+44, fontS, headCol)
-		if ff.Food.EatAction == nil {
+		if isInedible(ff.Food) {
 			drawText(dst, "[raw / inedible — eating will penalise stats]", float64(rpListX), float64(panelY)+62, fontS, colorYellow)
 		}
 		if p.floorMoveMode {

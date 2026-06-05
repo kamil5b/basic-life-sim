@@ -30,9 +30,10 @@ const (
 	spCatFurniture
 	spCatHygiene
 	spCatFood
+	spCatUtility
 )
 
-var spCatLabels = []string{"Appliances", "Furniture", "Hygiene", "Food"}
+var spCatLabels = []string{"Appliances", "Furniture", "Hygiene", "Food", "Utilities"}
 
 type shopPanel struct {
 	char    *model.Character
@@ -70,6 +71,8 @@ func (p *shopPanel) currentCatalog() []model.RoomItem {
 		return roomitem.Furniture
 	case spCatHygiene:
 		return roomitem.Hygiene
+	case spCatUtility:
+		return roomitem.Utilities
 	}
 	return nil
 }
