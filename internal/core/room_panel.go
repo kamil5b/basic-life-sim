@@ -27,8 +27,8 @@ type roomPanel struct {
 	mode   rpMode
 	wizard *placementWizard
 
-	// fridge organizer state
-	fridgeWiz *fridgeWizard
+	// storage organizer state
+	storageWiz *storageWizard
 
 	// floor food move state
 	floorMoveMode           bool // true = waiting for user to click target cell
@@ -46,7 +46,7 @@ const (
 	rpModeMoveGrid                            // picking new X,Y for an item
 	rpModeMoveZ                               // picking new Z
 	rpModeMoveDir                             // picking new direction
-	rpModeFridgeGrid                          // organising food inside a fridge (unused — handled by fridgeWiz)
+	rpModeFridgeGrid                          // organising food inside a storage container (unused — handled by storageWiz)
 	rpModeFloorItemAction                     // action picker for a selected floor item (food or utility)
 	rpModeFloorFoodFridgeChoice               // "In World" vs "In Fridge" when dropping food onto a fridge cell
 	rpModeUtilityChoice                       // use utility on food vs place separately
@@ -94,7 +94,7 @@ func (p *roomPanel) floorItemsAtCell(gx, gy int) []int {
 func (p *roomPanel) floorFoodAtCell(gx, gy int) []int {
 	var out []int
 	for _, idx := range p.floorItemsAtCell(gx, gy) {
-		if p.char.CurrentHome.FloorItems[idx].Kind == model.FloorKindFood {
+		if p.char.CurrentHome.FloorItems[idx].Item.Kind == model.FloorKindFood {
 			out = append(out, idx)
 		}
 	}
@@ -135,9 +135,9 @@ func (p *roomPanel) gridCellAt(px, py int) (gx, gy int) {
 }
 
 func (p *roomPanel) update() {
-	if p.fridgeWiz != nil {
-		if p.fridgeWiz.update() {
-			p.fridgeWiz = nil
+	if p.storageWiz != nil {
+		if p.storageWiz.update() {
+			p.storageWiz = nil
 		}
 		return
 	}
@@ -248,13 +248,13 @@ func (p *roomPanel) update() {
 		if placed.Item.Storage != nil {
 			obx, oby, obw, obh := rpOrganizeBtnRect()
 			if clicked && isHovered(mx, my, obx, oby, obw, obh) {
-				p.fridgeWiz = newFridgeWizard(
+				p.storageWiz = newStorageWizard(
 					p.char, p.selItem,
 					rpGridX, rpGridY+20, rpListX,
-					nil, false,
+					nil, nil, 0, false,
 					p.main.setMessage,
-					func() { p.fridgeWiz = nil },
-					func() { p.fridgeWiz = nil },
+					func() { p.storageWiz = nil },
+					func() { p.storageWiz = nil },
 				)
 				return
 			}
@@ -274,7 +274,7 @@ func (p *roomPanel) update() {
 			return
 		}
 		fi := &p.char.CurrentHome.FloorItems[p.selFloorItem]
-		isFood := fi.Kind == model.FloorKindFood
+		isFood := fi.Item.Kind == model.FloorKindFood
 
 		// Back
 		bx, by, bw, bh := rpBackBtnRect()
@@ -289,15 +289,15 @@ func (p *roomPanel) update() {
 			eax, eay, eaw, eah := rpFloorFoodEatBtnRect()
 			if clicked && isHovered(mx, my, eax, eay, eaw, eah) && !p.floorMoveMode {
 				char := p.char
-				if model.IsExpired(fi.PurchaseDate, fi.Food.BaseExpiryDays, 1, char.CurrentDate) {
+				if model.IsExpired(fi.Item.PurchaseDate, fi.Item.Food.BaseExpiryDays, 1, char.CurrentDate) {
 					foodExpiredPenalty(char)
-					p.main.setMessage(fmt.Sprintf("%s was EXPIRED — all stats -10!", fi.Food.Name))
-				} else if isInedible(fi.Food) {
+					p.main.setMessage(fmt.Sprintf("%s was EXPIRED — all stats -10!", fi.Item.Food.Name))
+				} else if isInedible(fi.Item.Food) {
 					rawFoodPenalty(char)
-					p.main.setMessage(fmt.Sprintf("Eating raw %s penalised stats -5.", fi.Food.Name))
+					p.main.setMessage(fmt.Sprintf("Eating raw %s penalised stats -5.", fi.Item.Food.Name))
 				} else {
-					applyNutrition(char, fi.Food)
-					p.main.setMessage(fmt.Sprintf("Ate %s.", fi.Food.Name))
+					applyNutrition(char, fi.Item.Food)
+					p.main.setMessage(fmt.Sprintf("Ate %s.", fi.Item.Food.Name))
 				}
 				consumeUse(char, "floor", 0, p.selFloorItem)
 				p.selFloorItem = -1
@@ -310,15 +310,15 @@ func (p *roomPanel) update() {
 			if clicked && isHovered(mx, my, ex, ey, ew, eh) && !p.floorMoveMode {
 				processed := false
 				for oi, o := range p.char.CurrentHome.FloorItems {
-					if o.Kind == model.FloorKindFood && o.X == fi.X && o.Y == fi.Y {
+					if o.Item.Kind == model.FloorKindFood && o.X == fi.X && o.Y == fi.Y {
 						tryUseUtilityOnFood(p.char, oi, p.selFloorItem)
 						processed = true
 						break
 					}
 				}
 				if !processed {
-					fi.Utility.DoAction("use", &p.char.CurrentStats, p.char)
-					p.main.setMessage(fmt.Sprintf("Used %s.", fi.Utility.Name))
+					fi.Item.Utility.DoAction("use", &p.char.CurrentStats, p.char)
+					p.main.setMessage(fmt.Sprintf("Used %s.", fi.Item.Utility.Name))
 				}
 			}
 		}
@@ -336,9 +336,9 @@ func (p *roomPanel) update() {
 		// Trash
 		tx, ty, tw, th := rpFloorFoodTrashBtnRect()
 		if clicked && isHovered(mx, my, tx, ty, tw, th) && !p.floorMoveMode {
-			name := fi.Food.Name
+			name := fi.Item.Food.Name
 			if !isFood {
-				name = fi.Utility.Name
+				name = fi.Item.Utility.Name
 			}
 			p.char.CurrentHome.FloorItems = append(
 				p.char.CurrentHome.FloorItems[:p.selFloorItem],
@@ -356,14 +356,14 @@ func (p *roomPanel) update() {
 				fi.X = uint8(gx)
 				fi.Y = uint8(gy)
 				p.selCell = [2]int{gx, gy}
-				name := fi.Food.Name
+				name := fi.Item.Food.Name
 				if !isFood {
-					name = fi.Utility.Name
+					name = fi.Item.Utility.Name
 				}
 				// If food moved onto a utility, offer choice
 				if isFood {
 					for oi, o := range p.char.CurrentHome.FloorItems {
-						if o.Kind == model.FloorKindUtility && int(o.X) == gx && int(o.Y) == gy && o.Utility.Ability != "" {
+						if o.Item.Kind == model.FloorKindUtility && int(o.X) == gx && int(o.Y) == gy && o.Item.Utility.Ability != "" {
 							fi.X = uint8(gx)
 							fi.Y = uint8(gy)
 							p.utilTarget = oi
@@ -431,7 +431,7 @@ func (p *roomPanel) update() {
 			ff.Y = uint8(p.floorFoodFridgeTargetXY[1])
 			ff.Z = topZ
 			p.selCell = p.floorFoodFridgeTargetXY
-			p.main.setMessage(fmt.Sprintf("Placed %s on top of %s (z=%d).", ff.Food.Name, fridgePlaced.Item.Name, topZ))
+			p.main.setMessage(fmt.Sprintf("Placed %s on top of %s (z=%d).", ff.Item.Food.Name, fridgePlaced.Item.Name, topZ))
 			p.floorFoodFridgeTarget = -1
 			p.selFloorItem = -1
 			p.mode = rpModeFiltered
@@ -446,21 +446,21 @@ func (p *roomPanel) update() {
 				p.main.setMessage("Fridge is full!")
 				return
 			}
-			ffCopy := ff.Food
+			ffCopy := ff.Item.Food
 			ffIdx := p.selFloorItem
 			fridgeIdx := p.floorFoodFridgeTarget
-			p.fridgeWiz = newFridgeWizard(
+			p.storageWiz = newStorageWizard(
 				p.char, fridgeIdx,
 				rpGridX, rpGridY+20, rpListX,
-				&ffCopy, false,
+				&ffCopy, nil, model.FloorKindFood, false,
 				p.main.setMessage,
-				func() { p.fridgeWiz = nil },
+				func() { p.storageWiz = nil },
 				func() {
-					// Placed in fridge — remove from floor
+					// Placed in storage — remove from floor
 					p.char.CurrentHome.FloorItems = append(
 						p.char.CurrentHome.FloorItems[:ffIdx],
 						p.char.CurrentHome.FloorItems[ffIdx+1:]...)
-					p.fridgeWiz = nil
+					p.storageWiz = nil
 					p.floorFoodFridgeTarget = -1
 					p.selFloorItem = -1
 					p.mode = rpModeFiltered
@@ -642,24 +642,24 @@ func (p *roomPanel) executeAction(placed *model.PlacedRoomItem, action string) {
 				return
 			}
 			for i, s := range placed.Stored {
-				if model.IsExpired(s.PurchaseDate, s.Food.BaseExpiryDays, s.MultiplierUsed, char.CurrentDate) {
+				if model.IsExpired(s.Item.PurchaseDate, s.Item.Food.BaseExpiryDays, s.Item.MultiplierUsed, char.CurrentDate) {
 					foodExpiredPenalty(char)
-					placed.Stored[i].UsesRemaining--
-					if placed.Stored[i].UsesRemaining == 0 {
+					placed.Stored[i].Item.UsesRemaining--
+					if placed.Stored[i].Item.UsesRemaining == 0 {
 						placed.Stored = append(placed.Stored[:i], placed.Stored[i+1:]...)
 					}
-					p.main.setMessage(fmt.Sprintf("%s was EXPIRED — stat penalty applied!", s.Food.Name))
+					p.main.setMessage(fmt.Sprintf("%s was EXPIRED — stat penalty applied!", s.Item.Food.Name))
 					return
 				}
-				inedible := s.Food.Nutrition.Food == 0 && s.Food.Nutrition.Energy == 0 &&
-					s.Food.Nutrition.Hygiene == 0 && s.Food.Nutrition.Confidence == 0 &&
-					s.Food.Nutrition.Strength == 0 && s.Food.OnEat == nil
+				inedible := s.Item.Food.Nutrition.Food == 0 && s.Item.Food.Nutrition.Energy == 0 &&
+					s.Item.Food.Nutrition.Hygiene == 0 && s.Item.Food.Nutrition.Confidence == 0 &&
+					s.Item.Food.Nutrition.Strength == 0 && s.Item.Food.OnEat == nil
 				if inedible {
 					rawFoodPenalty(char)
-					p.main.setMessage(fmt.Sprintf("Eating raw %s was a bad idea.", s.Food.Name))
+					p.main.setMessage(fmt.Sprintf("Eating raw %s was a bad idea.", s.Item.Food.Name))
 				} else {
-					applyNutrition(char, s.Food)
-					p.main.setMessage(fmt.Sprintf("Ate %s from fridge. Uses left: %d", s.Food.Name, s.UsesRemaining-1))
+					applyNutrition(char, s.Item.Food)
+					p.main.setMessage(fmt.Sprintf("Ate %s from fridge. Uses left: %d", s.Item.Food.Name, s.Item.UsesRemaining-1))
 				}
 				consumeUse(char, "fridge", p.selItem, i)
 				return
@@ -708,10 +708,12 @@ func (p *roomPanel) executeAction(placed *model.PlacedRoomItem, action string) {
 			sf := placed.OnSurface[0]
 			placed.OnSurface = placed.OnSurface[1:]
 			char.CurrentHome.FloorItems = append(char.CurrentHome.FloorItems, model.FloorItem{
-				Kind:          model.FloorKindFood,
-				PurchaseDate:  sf.PurchaseDate,
-				UsesRemaining: sf.UsesRemaining,
-				Food:          sf.Food,
+				Item: model.InventoryItem{
+					Kind:          model.FloorKindFood,
+					PurchaseDate:  sf.PurchaseDate,
+					UsesRemaining: sf.UsesRemaining,
+					Food:          sf.Food,
+				},
 			})
 			p.main.setMessage(fmt.Sprintf("Took %s off surface, placed on floor.", sf.Food.Name))
 		}
@@ -817,8 +819,8 @@ func rpChoiceInFridgeBtnRect() (x, y, w, h float32) {
 // ── draw ──────────────────────────────────────────────────────────────────────
 
 func (p *roomPanel) draw(dst *ebiten.Image) {
-	if p.fridgeWiz != nil {
-		p.fridgeWiz.draw(dst)
+	if p.storageWiz != nil {
+		p.storageWiz.draw(dst)
 		return
 	}
 
@@ -862,10 +864,10 @@ func (p *roomPanel) draw(dst *ebiten.Image) {
 			drawText(dst, "Floor Items:", float64(rpListX), float64(yo), fontS, colorMuted)
 			yo += 18
 			for _, fi := range char.CurrentHome.FloorItems {
-				if fi.Kind == model.FloorKindFood {
-					drawText(dst, fmt.Sprintf("  %s (uses:%d)", fi.Food.Name, fi.UsesRemaining), float64(rpListX), float64(yo), fontS, colorFoodFloor)
+				if fi.Item.Kind == model.FloorKindFood {
+					drawText(dst, fmt.Sprintf("  %s (uses:%d)", fi.Item.Food.Name, fi.Item.UsesRemaining), float64(rpListX), float64(yo), fontS, colorFoodFloor)
 				} else {
-					drawText(dst, fmt.Sprintf("  %s", fi.Utility.Name), float64(rpListX), float64(yo), fontS, colorUtilFloor)
+					drawText(dst, fmt.Sprintf("  %s", fi.Item.Utility.Name), float64(rpListX), float64(yo), fontS, colorUtilFloor)
 				}
 				yo += 18
 			}
@@ -909,19 +911,19 @@ func (p *roomPanel) draw(dst *ebiten.Image) {
 			strokeRect(dst, rx, ry, rw, rh, colorBorder)
 			var label string
 			var tc color.RGBA
-			if fi.Kind == model.FloorKindFood {
-				exp := model.IsExpired(fi.PurchaseDate, fi.Food.BaseExpiryDays, 1, char.CurrentDate)
+			if fi.Item.Kind == model.FloorKindFood {
+				exp := model.IsExpired(fi.Item.PurchaseDate, fi.Item.Food.BaseExpiryDays, 1, char.CurrentDate)
 				tc = colorFoodFloor
 				if exp {
 					tc = colorRed
 				}
-				label = fmt.Sprintf("🍞 %s  uses:%d  z=%d", fi.Food.Name, fi.UsesRemaining, fi.Z)
+				label = fmt.Sprintf("🍞 %s  uses:%d  z=%d", fi.Item.Food.Name, fi.Item.UsesRemaining, fi.Z)
 				if exp {
 					label += " [EXPIRED]"
 				}
 			} else {
 				tc = colorUtilFloor
-				label = fmt.Sprintf("🔧 %s  z=%d", fi.Utility.Name, fi.Z)
+				label = fmt.Sprintf("🔧 %s  z=%d", fi.Item.Utility.Name, fi.Z)
 			}
 			drawText(dst, label, float64(rx)+6, float64(ry)+6, fontS, tc)
 		}
@@ -944,17 +946,17 @@ func (p *roomPanel) draw(dst *ebiten.Image) {
 				float64(rpListX), float64(panelY)+44, fontS, colorText)
 			iy := float64(panelY) + 64
 			for _, s := range placed.Stored {
-				exp := model.IsExpired(s.PurchaseDate, s.Food.BaseExpiryDays, s.MultiplierUsed, char.CurrentDate)
+				exp := model.IsExpired(s.Item.PurchaseDate, s.Item.Food.BaseExpiryDays, s.Item.MultiplierUsed, char.CurrentDate)
 				col := colorText
 				tag := ""
 				if exp {
 					col = colorRed
 					tag = " [EXPIRED]"
 				}
-				expiry := model.ExpiryDate(s.PurchaseDate, s.Food.BaseExpiryDays, s.MultiplierUsed)
+				expiry := model.ExpiryDate(s.Item.PurchaseDate, s.Item.Food.BaseExpiryDays, s.Item.MultiplierUsed)
 				ey, em, ed := expiry.Unpack()
 				drawText(dst, fmt.Sprintf("  %s  uses:%d  exp:%04d-%02d-%02d%s",
-					s.Food.Name, s.UsesRemaining, ey, em, ed, tag),
+					s.Item.Food.Name, s.Item.UsesRemaining, ey, em, ed, tag),
 					float64(rpListX), iy, fontS, col)
 				iy += 18
 			}
@@ -1007,11 +1009,11 @@ func (p *roomPanel) draw(dst *ebiten.Image) {
 		fi := char.CurrentHome.FloorItems[p.selFloorItem]
 		util := char.CurrentHome.FloorItems[p.utilTarget]
 		drawText(dst, "Use Utility?", float64(rpListX), float64(panelY)+16, fontM, colorAccent)
-		drawText(dst, fmt.Sprintf("%s + %s", fi.Food.Name, util.Utility.Name),
+		drawText(dst, fmt.Sprintf("%s + %s", fi.Item.Food.Name, util.Item.Utility.Name),
 			float64(rpListX), float64(panelY)+44, fontS, colorText)
 
 		ex, ey, ew, eh := rpFloorFoodEatBtnRect()
-		drawButton(dst, fmt.Sprintf("Use %s", util.Utility.Name), ex, ey, ew, eh, fontS, isHovered(mx, my, ex, ey, ew, eh), true)
+		drawButton(dst, fmt.Sprintf("Use %s", util.Item.Utility.Name), ex, ey, ew, eh, fontS, isHovered(mx, my, ex, ey, ew, eh), true)
 		mmx, mmy, mmw, mmh := rpFloorFoodMoveBtnRect()
 		drawButton(dst, "Place Separately", mmx, mmy, mmw, mmh, fontS, isHovered(mx, my, mmx, mmy, mmw, mmh), true)
 		bx, by, bw, bh := rpBackBtnRect()
@@ -1022,13 +1024,13 @@ func (p *roomPanel) draw(dst *ebiten.Image) {
 			return
 		}
 		fi := char.CurrentHome.FloorItems[p.selFloorItem]
-		isFood := fi.Kind == model.FloorKindFood
+		isFood := fi.Item.Kind == model.FloorKindFood
 		headCol := colorUtilFloor
-		name := fi.Utility.Name
+		name := fi.Item.Utility.Name
 		if isFood {
 			headCol = colorFoodFloor
-			name = fi.Food.Name
-			exp := model.IsExpired(fi.PurchaseDate, fi.Food.BaseExpiryDays, 1, char.CurrentDate)
+			name = fi.Item.Food.Name
+			exp := model.IsExpired(fi.Item.PurchaseDate, fi.Item.Food.BaseExpiryDays, 1, char.CurrentDate)
 			if exp {
 				headCol = colorRed
 			}
@@ -1037,15 +1039,15 @@ func (p *roomPanel) draw(dst *ebiten.Image) {
 		drawText(dst, fmt.Sprintf("at (%d,%d,z=%d)", fi.X, fi.Y, fi.Z),
 			float64(rpListX), float64(panelY)+22, fontS, colorMuted)
 		if isFood {
-			exp := model.IsExpired(fi.PurchaseDate, fi.Food.BaseExpiryDays, 1, char.CurrentDate)
-			expiry := model.ExpiryDate(fi.PurchaseDate, fi.Food.BaseExpiryDays, 1)
+			exp := model.IsExpired(fi.Item.PurchaseDate, fi.Item.Food.BaseExpiryDays, 1, char.CurrentDate)
+			expiry := model.ExpiryDate(fi.Item.PurchaseDate, fi.Item.Food.BaseExpiryDays, 1)
 			ey, em, ed := expiry.Unpack()
 			expTag := fmt.Sprintf("Expires: %04d-%02d-%02d", ey, em, ed)
 			if exp {
 				expTag = fmt.Sprintf("EXPIRED %04d-%02d-%02d", ey, em, ed)
 			}
 			drawText(dst, expTag, float64(rpListX), float64(panelY)+44, fontS, headCol)
-			if isInedible(fi.Food) {
+			if isInedible(fi.Item.Food) {
 				drawText(dst, "[raw / inedible — eating will penalise stats]", float64(rpListX), float64(panelY)+62, fontS, colorYellow)
 			}
 		}
@@ -1080,7 +1082,7 @@ func (p *roomPanel) draw(dst *ebiten.Image) {
 		fridgePlaced := char.CurrentHome.RoomItems[p.floorFoodFridgeTarget]
 		topZ := fridgePlaced.Z + fridgePlaced.Item.Height
 
-		drawText(dst, "Where to put "+ff2.Food.Name+"?", float64(rpListX), float64(panelY)+12, fontM, colorAccent)
+		drawText(dst, "Where to put "+ff2.Item.Food.Name+"?", float64(rpListX), float64(panelY)+12, fontM, colorAccent)
 		drawText(dst, fmt.Sprintf("Dropping onto: %s at (%d,%d)",
 			fridgePlaced.Item.Name, p.floorFoodFridgeTargetXY[0], p.floorFoodFridgeTargetXY[1]),
 			float64(rpListX), float64(panelY)+36, fontS, colorMuted)
@@ -1243,7 +1245,7 @@ func (p *roomPanel) drawRoomGrid(dst *ebiten.Image) {
 	for _, fi := range home.FloorItems {
 		cx := ox + float32(fi.X)*rpCellSz
 		cy := oy + float32(fi.Y)*rpCellSz
-		if fi.Kind == model.FloorKindFood {
+		if fi.Item.Kind == model.FloorKindFood {
 			fillRect(dst, cx+8, cy+8, rpCellSz-17, rpCellSz-17, colorFoodFloor)
 		} else {
 			fillRect(dst, cx+4, cy+4, rpCellSz-9, rpCellSz-9, colorUtilFloor)

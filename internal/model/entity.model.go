@@ -138,23 +138,58 @@ type StoredFood struct {
 	Food                Food
 }
 
+// InventoryItem holds fields shared by StoredItem and FloorItem.
+type InventoryItem struct {
+	Kind           FloorItemKind
+	PurchaseDate   CompactDate // food only: date bought
+	MultiplierUsed float32     // food only: effective expiry multiplier
+	UsesRemaining  uint8       // food: decrements on eat; utility: unused
+	Food           Food        // set when Kind == FloorKindFood
+	Utility        Utility     // set when Kind == FloorKindUtility
+}
+
+// Name returns the display name of whichever kind is stored.
+func (it InventoryItem) Name() string {
+	if it.Kind == FloorKindFood {
+		return it.Food.Name
+	}
+	return it.Utility.Name
+}
+
+// Dims returns the dimensions of whatever is stored.
+func (it InventoryItem) Dims() (w, l, h uint8) {
+	if it.Kind == FloorKindFood {
+		return it.Food.Width, it.Food.Length, it.Food.Height
+	}
+	return it.Utility.Width, it.Utility.Length, it.Utility.Height
+}
+
 // StoredItem is a food or utility occupying a slot inside a storage container.
 type StoredItem struct {
 	SlotX, SlotY, SlotZ uint8
-	Kind                FloorItemKind
-	PurchaseDate        CompactDate // food only: date bought
-	MultiplierUsed      float32     // food only: effective expiry multiplier
-	UsesRemaining       uint8       // food: decrements on eat; utility: unused
-	Food                Food        // set when Kind == FloorKindFood
-	Utility             Utility     // set when Kind == FloorKindUtility
+	Item                InventoryItem
 }
 
-// Size returns the dimensions of whatever is stored.
+// Dims returns the dimensions of whatever is stored.
 func (s StoredItem) Dims() (w, l, h uint8) {
-	if s.Kind == FloorKindFood {
-		return s.Food.Width, s.Food.Length, s.Food.Height
+	return s.Item.Dims()
+}
+
+// NewStoredItem creates a StoredItem with Kind-appropriate defaults.
+func NewStoredItem(kind FloorItemKind, food Food, utility Utility, slotX, slotY, slotZ uint8, purchaseDate CompactDate, multiplier float32, uses uint8) StoredItem {
+	return StoredItem{
+		SlotX: slotX,
+		SlotY: slotY,
+		SlotZ: slotZ,
+		Item: InventoryItem{
+			Kind:           kind,
+			PurchaseDate:   purchaseDate,
+			MultiplierUsed: multiplier,
+			UsesRemaining:  uses,
+			Food:           food,
+			Utility:        utility,
+		},
 	}
-	return s.Utility.Width, s.Utility.Length, s.Utility.Height
 }
 
 // SurfaceFood is a food item resting on a cooking appliance surface (placed there by the player).
@@ -202,12 +237,8 @@ const (
 
 // FloorItem is a food or utility placed directly on the floor grid.
 type FloorItem struct {
-	X, Y, Z       uint8
-	Kind          FloorItemKind
-	PurchaseDate  CompactDate // food only
-	UsesRemaining uint8       // food only
-	Food          Food        // set when Kind == FloorKindFood
-	Utility       Utility     // set when Kind == FloorKindUtility
+	X, Y, Z uint8
+	Item    InventoryItem
 }
 
 type Home struct {

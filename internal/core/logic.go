@@ -355,7 +355,7 @@ func nextFreeSlot(placed *model.PlacedRoomItem, cap *model.StorageCapacity, w, l
 	return [3]uint8{}, false
 }
 
-func findFridges(char *model.Character) []int {
+func findStorage(char *model.Character) []int {
 	var out []int
 	for i, p := range char.CurrentHome.RoomItems {
 		if p.Item.Storage != nil {
@@ -450,14 +450,14 @@ func consumeUse(char *model.Character, kind string, itemIdx, foodIdx int) {
 	switch kind {
 	case "floor":
 		f := &char.CurrentHome.FloorItems[foodIdx]
-		f.UsesRemaining--
-		if f.UsesRemaining == 0 {
+		f.Item.UsesRemaining--
+		if f.Item.UsesRemaining == 0 {
 			char.CurrentHome.FloorItems = append(char.CurrentHome.FloorItems[:foodIdx], char.CurrentHome.FloorItems[foodIdx+1:]...)
 		}
 	case "fridge":
 		s := &char.CurrentHome.RoomItems[itemIdx].Stored[foodIdx]
-		s.UsesRemaining--
-		if s.UsesRemaining == 0 {
+		s.Item.UsesRemaining--
+		if s.Item.UsesRemaining == 0 {
 			ri := &char.CurrentHome.RoomItems[itemIdx]
 			ri.Stored = append(ri.Stored[:foodIdx], ri.Stored[foodIdx+1:]...)
 		}
@@ -477,7 +477,7 @@ func nextFoodZ(char *model.Character, x, y uint8) uint8 {
 	maxTop := uint8(0)
 	for _, fi := range char.CurrentHome.FloorItems {
 		if fi.X == x && fi.Y == y {
-			top := fi.Z + fi.Food.Height
+			top := fi.Z + fi.Item.Food.Height
 			if top > maxTop {
 				maxTop = top
 			}
@@ -540,16 +540,16 @@ func tryUseUtilityOnFood(char *model.Character, foodIdx, utilIdx int) {
 	}
 	food := &char.CurrentHome.FloorItems[foodIdx]
 	util := &char.CurrentHome.FloorItems[utilIdx]
-	if food.Kind != model.FloorKindFood || util.Kind != model.FloorKindUtility {
+	if food.Item.Kind != model.FloorKindFood || util.Item.Kind != model.FloorKindUtility {
 		return
 	}
-	if util.Utility.Ability != "" {
-		for _, pr := range food.Food.ProcessResults {
-			if pr.Ability == util.Utility.Ability {
+	if util.Item.Utility.Ability != "" {
+		for _, pr := range food.Item.Food.ProcessResults {
+			if pr.Ability == util.Item.Utility.Ability {
 				if result, ok := model.FoodRegistry[pr.ResultName]; ok {
-					result.UsesTotal = food.UsesRemaining
-					food.Food = result
-					food.UsesRemaining = result.UsesTotal
+					result.UsesTotal = food.Item.UsesRemaining
+					food.Item.Food = result
+					food.Item.UsesRemaining = result.UsesTotal
 				}
 				return
 			}

@@ -48,22 +48,22 @@ func (p *foodPanel) gatherSources() []foodSource {
 	char := p.char
 	var out []foodSource
 	for i, fi := range char.CurrentHome.FloorItems {
-		if fi.Kind != model.FloorKindFood {
+		if fi.Item.Kind != model.FloorKindFood {
 			continue
 		}
 		out = append(out, foodSource{
-			label: fi.Food.Name, purchaseDate: fi.PurchaseDate,
-			multiplier: 1, usesRemaining: fi.UsesRemaining,
-			food: fi.Food, kind: "floor", foodIdx: i,
+			label: fi.Item.Food.Name, purchaseDate: fi.Item.PurchaseDate,
+			multiplier: 1, usesRemaining: fi.Item.UsesRemaining,
+			food: fi.Item.Food, kind: "floor", foodIdx: i,
 		})
 	}
 	for ri, placed := range char.CurrentHome.RoomItems {
 		if placed.Item.Storage != nil {
 			for fi, s := range placed.Stored {
 				out = append(out, foodSource{
-					label: s.Food.Name, purchaseDate: s.PurchaseDate,
-					multiplier: s.MultiplierUsed, usesRemaining: s.UsesRemaining,
-					food: s.Food, kind: "fridge", itemIdx: ri, foodIdx: fi,
+					label: s.Item.Food.Name, purchaseDate: s.Item.PurchaseDate,
+					multiplier: s.Item.MultiplierUsed, usesRemaining: s.Item.UsesRemaining,
+					food: s.Item.Food, kind: "fridge", itemIdx: ri, foodIdx: fi,
 				})
 			}
 		}
@@ -157,9 +157,9 @@ func (p *foodPanel) update() {
 	// → Fridge button
 	mx2, my2, mw, mh := fpActionBtnRect(1)
 	if isHovered(mx, my, mx2, my2, mw, mh) && src.kind != "fridge" {
-		fridges := findFridges(char)
+		fridges := findStorage(char)
 		if len(fridges) == 0 {
-			p.main.setMessage("No fridge in room. Buy one from the Shop.")
+			p.main.setMessage("No storage in room. Buy one from the Shop.")
 			return
 		}
 		placed := &char.CurrentHome.RoomItems[fridges[0]]
@@ -173,11 +173,13 @@ func (p *foodPanel) update() {
 		removeFoodEntirely(char, src.kind, src.itemIdx, src.foodIdx)
 		placed.Stored = append(placed.Stored, model.StoredItem{
 			SlotX: slot[0], SlotY: slot[1], SlotZ: slot[2],
-			Kind:           model.FloorKindFood,
-			PurchaseDate:   src.purchaseDate,
-			MultiplierUsed: mult,
-			UsesRemaining:  src.usesRemaining,
-			Food:           src.food,
+			Item: model.InventoryItem{
+				Kind:           model.FloorKindFood,
+				PurchaseDate:   src.purchaseDate,
+				MultiplierUsed: mult,
+				UsesRemaining:  src.usesRemaining,
+				Food:           src.food,
+			},
 		})
 		expiry := model.ExpiryDate(src.purchaseDate, src.food.BaseExpiryDays, mult)
 		ey2, em, ed := expiry.Unpack()
@@ -225,10 +227,12 @@ func (p *foodPanel) update() {
 		removeFoodEntirely(char, src.kind, src.itemIdx, src.foodIdx)
 		char.CurrentHome.FloorItems = append(char.CurrentHome.FloorItems, model.FloorItem{
 			X: 0, Y: 0, Z: 0,
-			Kind:          model.FloorKindFood,
-			PurchaseDate:  char.CurrentDate,
-			UsesRemaining: src.usesRemaining,
-			Food:          newFood,
+			Item: model.InventoryItem{
+				Kind:          model.FloorKindFood,
+				PurchaseDate:  char.CurrentDate,
+				UsesRemaining: src.usesRemaining,
+				Food:          newFood,
+			},
 		})
 		expiry := model.ExpiryDate(char.CurrentDate, newFood.BaseExpiryDays, 1)
 		ey2, em, ed := expiry.Unpack()
@@ -352,7 +356,7 @@ func (p *foodPanel) draw(dst *ebiten.Image) {
 		ex, ey2, ew, eh := fpActionBtnRect(0)
 		drawButton(dst, eatLabel, ex, ey2, ew, eh, fontM, isHovered(mx, my, ex, ey2, ew, eh), true)
 
-		fridgeEnabled := src.kind != "fridge" && len(findFridges(char)) > 0
+		fridgeEnabled := src.kind != "fridge" && len(findStorage(char)) > 0
 		mx2, my2, mw, mh := fpActionBtnRect(1)
 		drawButton(dst, "→ Fridge", mx2, my2, mw, mh, fontM, isHovered(mx, my, mx2, my2, mw, mh) && fridgeEnabled, fridgeEnabled)
 
@@ -409,7 +413,7 @@ func (p *foodPanel) draw(dst *ebiten.Image) {
 			for _, fi := range home.FloorItems {
 				cellX := ox + float32(fi.X)*rpCellSz
 				cellY := oy + float32(fi.Y)*rpCellSz
-				if fi.Kind == model.FloorKindFood {
+				if fi.Item.Kind == model.FloorKindFood {
 					fillRect(dst, cellX+8, cellY+8, rpCellSz-17, rpCellSz-17, colorFoodFloor)
 				} else {
 					fillRect(dst, cellX+4, cellY+4, rpCellSz-9, rpCellSz-9, colorUtilFloor)

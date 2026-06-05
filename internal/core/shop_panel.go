@@ -71,8 +71,8 @@ type shopPanel struct {
 	storageOptions []int // indices into RoomItems for storage choice
 	utilOptionIdx  int   // index in FloorItems of utility being used on food
 
-	// fridge placement state
-	fridgeWiz *fridgeWizard
+	// storage placement state
+	storageWiz *storageWizard
 }
 
 func newShopPanel(char *model.Character, main *mainScreen) *shopPanel {
@@ -99,9 +99,9 @@ func (p *shopPanel) currentCatalog() []model.RoomItem {
 }
 
 func (p *shopPanel) update() {
-	if p.fridgeWiz != nil {
-		if p.fridgeWiz.update() {
-			p.fridgeWiz = nil
+	if p.storageWiz != nil {
+		if p.storageWiz.update() {
+			p.storageWiz = nil
 			p.pendingFood = nil
 			p.mode = spModeCatalog
 		}
@@ -217,19 +217,48 @@ func (p *shopPanel) update() {
 		}
 		f := *p.pendingFood
 		char := p.char
-		// Mix button
-		mx2, my2, mw, mh := spStackMixBtnRect()
-		if isHovered(mx, my, mx2, my2, mw, mh) && p.stackFloorIdx >= 0 {
-			existing := &char.CurrentHome.FloorItems[p.stackFloorIdx]
-			char.CurrentStats.Money -= f.BasePrice
-			existing.UsesRemaining += f.UsesTotal
-			p.main.setMessage(fmt.Sprintf("Mixed %s. Total uses: %d. Money: $%.2f",
-				f.Name, existing.UsesRemaining, char.CurrentStats.Money))
-			p.pendingFood = nil
-			p.stackFloorIdx = -1
+		if p.stackFloorIdx < 0 || p.stackFloorIdx >= len(char.CurrentHome.FloorItems) {
 			p.mode = spModeCatalog
 			return
 		}
+		existing := &char.CurrentHome.FloorItems[p.stackFloorIdx]
+		sameName := existing.Item.Food.Name == f.Name
+
+		// Recipe button (only when different foods can be combined)
+		if !sameName {
+			if result, ok := MixFoods(existing.Item.Food, f); ok {
+				rx, ry, rw, rh := spRecipeBtnRect()
+				if isHovered(mx, my, rx, ry, rw, rh) {
+					char.CurrentStats.Money -= f.BasePrice
+					// Replace existing floor item with recipe result
+					existing.Item.Food = *result
+					existing.Item.UsesRemaining = result.UsesTotal + existing.Item.UsesRemaining
+					existing.Item.PurchaseDate = char.CurrentDate
+					p.main.setMessage(fmt.Sprintf("Combined %s + %s → %s. Money: $%.2f",
+						existing.Item.Food.Name, f.Name, result.Name, char.CurrentStats.Money))
+					p.pendingFood = nil
+					p.stackFloorIdx = -1
+					p.mode = spModeCatalog
+					return
+				}
+			}
+		}
+
+		// Mix button (same name stacking)
+		if sameName {
+			mx2, my2, mw, mh := spStackMixBtnRect()
+			if isHovered(mx, my, mx2, my2, mw, mh) {
+				char.CurrentStats.Money -= f.BasePrice
+				existing.Item.UsesRemaining += f.UsesTotal
+				p.main.setMessage(fmt.Sprintf("Mixed %s. Total uses: %d. Money: $%.2f",
+					f.Name, existing.Item.UsesRemaining, char.CurrentStats.Money))
+				p.pendingFood = nil
+				p.stackFloorIdx = -1
+				p.mode = spModeCatalog
+				return
+			}
+		}
+
 		// Place Separately button
 		sx, sy, sw, sh := spStackSepBtnRect()
 		if isHovered(mx, my, sx, sy, sw, sh) {
@@ -237,10 +266,12 @@ func (p *shopPanel) update() {
 			char.CurrentStats.Money -= f.BasePrice
 			char.CurrentHome.FloorItems = append(char.CurrentHome.FloorItems, model.FloorItem{
 				X: p.foodX, Y: p.foodY, Z: nextZ,
-				Kind:          model.FloorKindFood,
-				PurchaseDate:  char.CurrentDate,
-				UsesRemaining: f.UsesTotal,
-				Food:          f,
+				Item: model.InventoryItem{
+					Kind:          model.FloorKindFood,
+					PurchaseDate:  char.CurrentDate,
+					UsesRemaining: f.UsesTotal,
+					Food:          f,
+				},
 			})
 			p.main.setMessage(fmt.Sprintf("Placed %s separately at z=%d. Money: $%.2f",
 				f.Name, nextZ, char.CurrentStats.Money))
@@ -261,7 +292,6 @@ func (p *shopPanel) update() {
 			return
 		}
 		char := p.char
-		f := *p.pendingFood
 		// Cancel
 		cx2, cy2, cw, ch := spCancelBtnRect()
 		if isHovered(mx, my, cx2, cy2, cw, ch) {
@@ -276,22 +306,43 @@ func (p *shopPanel) update() {
 			bw := float32(200)
 			bh := float32(34)
 			if isHovered(mx, my, bx, by, bw, bh) {
-				p.fridgeWiz = newFridgeWizard(
-					char, fri,
-					spGridOriginX(), spGridOriginY(), panelX+8,
-					&f, true,
-					p.main.setMessage,
-					func() {
-						p.fridgeWiz = nil
-						p.main.setMessage("Cancelled. Click another cell.")
-					},
-					func() {
-						p.fridgeWiz = nil
-						p.pendingFood = nil
-						p.storageOptions = nil
-						p.mode = spModeCatalog
-					},
-				)
+				if p.pendingFood != nil {
+					f := *p.pendingFood
+					p.storageWiz = newStorageWizard(
+						char, fri,
+						spGridOriginX(), spGridOriginY(), panelX+8,
+						&f, nil, model.FloorKindFood, true,
+						p.main.setMessage,
+						func() {
+							p.storageWiz = nil
+							p.main.setMessage("Cancelled. Click another cell.")
+						},
+						func() {
+							p.storageWiz = nil
+							p.pendingFood = nil
+							p.storageOptions = nil
+							p.mode = spModeCatalog
+						},
+					)
+				} else if p.pendingUtility != nil {
+					u := *p.pendingUtility
+					p.storageWiz = newStorageWizard(
+						char, fri,
+						spGridOriginX(), spGridOriginY(), panelX+8,
+						nil, &u, model.FloorKindUtility, true,
+						p.main.setMessage,
+						func() {
+							p.storageWiz = nil
+							p.main.setMessage("Cancelled. Click another cell.")
+						},
+						func() {
+							p.storageWiz = nil
+							p.pendingUtility = nil
+							p.storageOptions = nil
+							p.mode = spModeCatalog
+						},
+					)
+				}
 				return
 			}
 		}
@@ -428,7 +479,7 @@ func (p *shopPanel) finalizeFoodPlace() {
 
 	// Collect ALL storage-capable items at this cell
 	p.storageOptions = nil
-	for _, fri := range findFridges(char) {
+	for _, fri := range findStorage(char) {
 		placed := char.CurrentHome.RoomItems[fri]
 		for _, cell := range occupiedCells(placed.X, placed.Y, placed.Item, placed.Direction) {
 			if cell[0] == p.foodX && cell[1] == p.foodY {
@@ -443,17 +494,17 @@ func (p *shopPanel) finalizeFoodPlace() {
 	if len(p.storageOptions) == 1 {
 		// Single storage → open directly
 		fri := p.storageOptions[0]
-		p.fridgeWiz = newFridgeWizard(
+		p.storageWiz = newStorageWizard(
 			char, fri,
 			spGridOriginX(), spGridOriginY(), panelX+8,
-			&f, true,
+			&f, nil, model.FloorKindFood, true,
 			p.main.setMessage,
 			func() {
-				p.fridgeWiz = nil
+				p.storageWiz = nil
 				p.main.setMessage("Cancelled. Click another cell.")
 			},
 			func() {
-				p.fridgeWiz = nil
+				p.storageWiz = nil
 				p.pendingFood = nil
 				p.mode = spModeCatalog
 			},
@@ -470,32 +521,41 @@ func (p *shopPanel) finalizeFoodPlace() {
 	// Check if there's already floor food at this cell
 	stackIdx := -1
 	for i, fi := range char.CurrentHome.FloorItems {
-		if fi.Kind == model.FloorKindFood && fi.X == p.foodX && fi.Y == p.foodY {
+		if fi.Item.Kind == model.FloorKindFood && fi.X == p.foodX && fi.Y == p.foodY {
 			stackIdx = i
 			break
 		}
 	}
 
-	if stackIdx >= 0 && f.CanBeMixed && char.CurrentHome.FloorItems[stackIdx].Food.Name == f.Name {
+	if stackIdx >= 0 && f.CanBeMixed && char.CurrentHome.FloorItems[stackIdx].Item.Food.Name == f.Name {
 		// Same food type and mixable → ask user
 		p.stackFloorIdx = stackIdx
 		p.mode = spModeStackConfirm
 		return
 	}
 
+	if stackIdx >= 0 && f.CanBeMixed && char.CurrentHome.FloorItems[stackIdx].Item.Food.Name != f.Name {
+		// Different foods — check if they can be combined into a recipe
+		if _, ok := MixFoods(char.CurrentHome.FloorItems[stackIdx].Item.Food, f); ok {
+			p.stackFloorIdx = stackIdx
+			p.mode = spModeStackConfirm
+			return
+		}
+	}
+
 	// Check if there's a utility at this cell the food can interact with
 	for i, fi := range char.CurrentHome.FloorItems {
-		if fi.Kind != model.FloorKindUtility || fi.X != p.foodX || fi.Y != p.foodY {
+		if fi.Item.Kind != model.FloorKindUtility || fi.X != p.foodX || fi.Y != p.foodY {
 			continue
 		}
 		// Utility can hold food on its surface (pan/wok) — but must be placed on host first
-		if fi.Utility.CookSurface != nil {
+		if fi.Item.Utility.CookSurface != nil {
 			// Skip — pans on floor can't hold food; they need to be on a stove
 		}
 		// Utility can process food (knife → chop, etc.)
-		if fi.Utility.Ability != "" {
+		if fi.Item.Utility.Ability != "" {
 			for _, pr := range f.ProcessResults {
-				if pr.Ability == fi.Utility.Ability {
+				if pr.Ability == fi.Item.Utility.Ability {
 					p.utilOptionIdx = i
 					p.mode = spModeUtilityChoice
 					return
@@ -509,10 +569,12 @@ func (p *shopPanel) finalizeFoodPlace() {
 	char.CurrentStats.Money -= f.BasePrice
 	char.CurrentHome.FloorItems = append(char.CurrentHome.FloorItems, model.FloorItem{
 		X: p.foodX, Y: p.foodY, Z: nextZ,
-		Kind:          model.FloorKindFood,
-		PurchaseDate:  char.CurrentDate,
-		UsesRemaining: f.UsesTotal,
-		Food:          f,
+		Item: model.InventoryItem{
+			Kind:          model.FloorKindFood,
+			PurchaseDate:  char.CurrentDate,
+			UsesRemaining: f.UsesTotal,
+			Food:          f,
+		},
 	})
 	expiry := model.ExpiryDate(char.CurrentDate, f.BaseExpiryDays, 1)
 	ey, em, ed := expiry.Unpack()
@@ -531,11 +593,55 @@ func (p *shopPanel) finalizeUtilityPlace() {
 	char := p.char
 	u := *p.pendingUtility
 
+	// Collect ALL storage-capable items at this cell
+	p.storageOptions = nil
+	for _, fri := range findStorage(char) {
+		placed := char.CurrentHome.RoomItems[fri]
+		for _, cell := range occupiedCells(placed.X, placed.Y, placed.Item, placed.Direction) {
+			if cell[0] == p.foodX && cell[1] == p.foodY {
+				if placed.Item.Storage.TotalSlots() > usedSlotCount(&char.CurrentHome.RoomItems[fri]) {
+					p.storageOptions = append(p.storageOptions, fri)
+				}
+				break
+			}
+		}
+	}
+
+	if len(p.storageOptions) == 1 {
+		// Single storage → open directly
+		fri := p.storageOptions[0]
+		p.storageWiz = newStorageWizard(
+			char, fri,
+			spGridOriginX(), spGridOriginY(), panelX+8,
+			nil, &u, model.FloorKindUtility, true,
+			p.main.setMessage,
+			func() {
+				p.storageWiz = nil
+				p.main.setMessage("Cancelled. Click another cell.")
+			},
+			func() {
+				p.storageWiz = nil
+				p.pendingUtility = nil
+				p.mode = spModeCatalog
+			},
+		)
+		return
+	}
+
+	if len(p.storageOptions) > 1 {
+		// Multiple → let user choose
+		p.mode = spModeStorageChoice
+		return
+	}
+
+	// No storage available → fall back to floor placement
 	char.CurrentStats.Money -= u.BasePrice
 	char.CurrentHome.FloorItems = append(char.CurrentHome.FloorItems, model.FloorItem{
 		X: p.foodX, Y: p.foodY, Z: 0,
-		Kind:    model.FloorKindUtility,
-		Utility: u,
+		Item: model.InventoryItem{
+			Kind:    model.FloorKindUtility,
+			Utility: u,
+		},
 	})
 	p.main.setMessage(fmt.Sprintf("Bought %s → floor (%d,%d). Money: $%.2f", u.Name, p.foodX, p.foodY, char.CurrentStats.Money))
 	p.pendingUtility = nil
@@ -548,10 +654,12 @@ func (p *shopPanel) placeFoodOnFloor(f *model.Food) {
 	char.CurrentStats.Money -= f.BasePrice
 	char.CurrentHome.FloorItems = append(char.CurrentHome.FloorItems, model.FloorItem{
 		X: p.foodX, Y: p.foodY, Z: nextZ,
-		Kind:          model.FloorKindFood,
-		PurchaseDate:  char.CurrentDate,
-		UsesRemaining: f.UsesTotal,
-		Food:          *f,
+		Item: model.InventoryItem{
+			Kind:          model.FloorKindFood,
+			PurchaseDate:  char.CurrentDate,
+			UsesRemaining: f.UsesTotal,
+			Food:          *f,
+		},
 	})
 	p.main.setMessage(fmt.Sprintf("Placed %s on floor.", f.Name))
 	p.pendingFood = nil
@@ -561,20 +669,22 @@ func (p *shopPanel) placeFoodOnFloor(f *model.Food) {
 func (p *shopPanel) useUtilityOnFood(f *model.Food, util model.FloorItem) {
 	char := p.char
 	char.CurrentStats.Money -= f.BasePrice
-	if util.Utility.Ability != "" {
+	if util.Item.Utility.Ability != "" {
 		// Process food with utility ability
 		for _, pr := range f.ProcessResults {
-			if pr.Ability == util.Utility.Ability {
+			if pr.Ability == util.Item.Utility.Ability {
 				if result, ok := model.FoodRegistry[pr.ResultName]; ok {
 					result.UsesTotal = f.UsesTotal
 					char.CurrentHome.FloorItems = append(char.CurrentHome.FloorItems, model.FloorItem{
 						X: p.foodX, Y: p.foodY, Z: 0,
-						Kind:          model.FloorKindFood,
-						PurchaseDate:  char.CurrentDate,
-						UsesRemaining: result.UsesTotal,
-						Food:          result,
+						Item: model.InventoryItem{
+							Kind:          model.FloorKindFood,
+							PurchaseDate:  char.CurrentDate,
+							UsesRemaining: result.UsesTotal,
+							Food:          result,
+						},
 					})
-					p.main.setMessage(fmt.Sprintf("Used %s → %s.", util.Utility.Name, result.Name))
+					p.main.setMessage(fmt.Sprintf("Used %s → %s.", util.Item.Utility.Name, result.Name))
 				}
 				break
 			}
@@ -615,6 +725,10 @@ func spStackMixBtnRect() (x, y, w, h float32) {
 
 func spStackSepBtnRect() (x, y, w, h float32) {
 	return panelX + 4, panelY + 136, 200, 44
+}
+
+func spRecipeBtnRect() (x, y, w, h float32) {
+	return panelX + 4, panelY + 192, 240, 44
 }
 
 var dirBtnLabels = []string{"↑ N", "→ E", "↓ S", "← W"}
@@ -752,8 +866,8 @@ func (p *shopPanel) visibleCatalogLen() int {
 // ── draw ──────────────────────────────────────────────────────────────────────
 
 func (p *shopPanel) draw(dst *ebiten.Image) {
-	if p.fridgeWiz != nil {
-		p.fridgeWiz.draw(dst)
+	if p.storageWiz != nil {
+		p.storageWiz.draw(dst)
 		return
 	}
 
@@ -954,21 +1068,39 @@ func (p *shopPanel) drawRow(dst *ebiten.Image, mx, my, idx int, name, detail str
 }
 
 func (p *shopPanel) drawStackConfirm(dst *ebiten.Image, mx, my int) {
-	if p.pendingFood == nil || p.stackFloorIdx < 0 {
+	if p.pendingFood == nil || p.stackFloorIdx < 0 || p.stackFloorIdx >= len(p.char.CurrentHome.FloorItems) {
 		return
 	}
 	f := *p.pendingFood
 	existing := p.char.CurrentHome.FloorItems[p.stackFloorIdx]
 	lx := float64(panelX) + 12
-	drawText(dst, "Stack Food", lx, float64(panelY)+16, fontM, colorAccent)
-	drawText(dst, fmt.Sprintf("Buying: %s (uses: %d)", f.Name, f.UsesTotal),
-		lx, float64(panelY)+44, fontS, colorText)
-	drawText(dst, fmt.Sprintf("On floor: %s (uses: %d)", existing.Food.Name, existing.UsesRemaining),
-		lx, float64(panelY)+62, fontS, colorMuted)
-	drawText(dst, "Combine into one stack?", lx, float64(panelY)+82, fontS, colorText)
+	sameName := existing.Item.Food.Name == f.Name
 
-	mx2, my2, mw, mh := spStackMixBtnRect()
-	drawButton(dst, "Mix Together", mx2, my2, mw, mh, fontM, isHovered(mx, my, mx2, my2, mw, mh), true)
+	if sameName {
+		drawText(dst, "Stack Food", lx, float64(panelY)+16, fontM, colorAccent)
+		drawText(dst, fmt.Sprintf("Buying: %s (uses: %d)", f.Name, f.UsesTotal),
+			lx, float64(panelY)+44, fontS, colorText)
+		drawText(dst, fmt.Sprintf("On floor: %s (uses: %d)", existing.Item.Food.Name, existing.Item.UsesRemaining),
+			lx, float64(panelY)+62, fontS, colorMuted)
+		drawText(dst, "Combine into one stack?", lx, float64(panelY)+82, fontS, colorText)
+
+		mx2, my2, mw, mh := spStackMixBtnRect()
+		drawButton(dst, "Mix Together", mx2, my2, mw, mh, fontM, isHovered(mx, my, mx2, my2, mw, mh), true)
+	} else {
+		drawText(dst, "Combine Foods", lx, float64(panelY)+16, fontM, colorAccent)
+		drawText(dst, fmt.Sprintf("Buying: %s (uses: %d)", f.Name, f.UsesTotal),
+			lx, float64(panelY)+44, fontS, colorText)
+		drawText(dst, fmt.Sprintf("On floor: %s (uses: %d)", existing.Item.Food.Name, existing.Item.UsesRemaining),
+			lx, float64(panelY)+62, fontS, colorMuted)
+
+		if result, ok := MixFoods(existing.Item.Food, f); ok {
+			drawText(dst, fmt.Sprintf("Recipe: %s + %s → %s", existing.Item.Food.Name, f.Name, result.Name),
+				lx, float64(panelY)+82, fontS, colorAccent)
+			rx, ry, rw, rh := spRecipeBtnRect()
+			drawButton(dst, fmt.Sprintf("Combine into %s", result.Name), rx, ry, rw, rh, fontM,
+				isHovered(mx, my, rx, ry, rw, rh), true)
+		}
+	}
 
 	sx, sy, sw, sh := spStackSepBtnRect()
 	drawButton(dst, "Place Separately", sx, sy, sw, sh, fontM, isHovered(mx, my, sx, sy, sw, sh), true)
@@ -1010,12 +1142,12 @@ func (p *shopPanel) drawUtilityChoice(dst *ebiten.Image, mx, my int) {
 	util := p.char.CurrentHome.FloorItems[p.utilOptionIdx]
 	lx := float64(panelX) + 12
 	drawText(dst, "Use Utility?", lx, float64(panelY)+16, fontM, colorAccent)
-	drawText(dst, fmt.Sprintf("%s + %s", f.Name, util.Utility.Name), lx, float64(panelY)+44, fontS, colorText)
+	drawText(dst, fmt.Sprintf("%s + %s", f.Name, util.Item.Utility.Name), lx, float64(panelY)+44, fontS, colorText)
 
 	mx2, my2, mw, mh := spStackMixBtnRect()
-	label := fmt.Sprintf("Use %s", util.Utility.Name)
-	if util.Utility.CookSurface != nil {
-		label = fmt.Sprintf("Place on %s", util.Utility.Name)
+	label := fmt.Sprintf("Use %s", util.Item.Utility.Name)
+	if util.Item.Utility.CookSurface != nil {
+		label = fmt.Sprintf("Place on %s", util.Item.Utility.Name)
 	}
 	drawButton(dst, label, mx2, my2, mw, mh, fontM, isHovered(mx, my, mx2, my2, mw, mh), true)
 
@@ -1082,7 +1214,7 @@ func (p *shopPanel) drawPlacementGrid(dst *ebiten.Image, mx, my int) {
 	for _, fi := range home.FloorItems {
 		cx := ox + float32(fi.X)*rpCellSz
 		cy := oy + float32(fi.Y)*rpCellSz
-		if fi.Kind == model.FloorKindFood {
+		if fi.Item.Kind == model.FloorKindFood {
 			fillRect(dst, cx+8, cy+8, rpCellSz-17, rpCellSz-17, colorFoodFloor)
 		} else {
 			fillRect(dst, cx+4, cy+4, rpCellSz-9, rpCellSz-9, colorUtilFloor)
