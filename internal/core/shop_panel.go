@@ -25,6 +25,16 @@ const (
 
 type spCategory int
 
+type spSort int
+
+const (
+	spSortName spSort = iota
+	spSortPrice
+	spSortVolume
+)
+
+const itemsPerPage = 10
+
 const (
 	spCatAppliance spCategory = iota
 	spCatFurniture
@@ -40,8 +50,13 @@ type shopPanel struct {
 	char    *model.Character
 	main    *mainScreen
 	cat     spCategory
-	selItem int // index in current catalog, -1 = none
+	selItem int // index in full (unsorted) catalog, -1 = none
 	mode    spMode
+
+	// pagination + sort
+	page    int
+	sortBy  spSort
+	sortAsc bool
 
 	// placement state
 	pendingItem    *model.RoomItem
@@ -104,15 +119,49 @@ func (p *shopPanel) update() {
 			if isHovered(mx, my, tx, ty, tw, th) {
 				p.cat = spCategory(i)
 				p.selItem = -1
+				p.page = 0
 				return
 			}
 		}
-		// item rows
-		catalog := p.visibleCatalogLen()
-		for i := 0; i < catalog; i++ {
-			rx, ry, rw, rh := spItemRowRect(i)
+		// sort buttons
+		sortY := panelY + 36
+		for si := 0; si < 3; si++ {
+			sx := panelX + 4 + float32(si)*54
+			if isHovered(mx, my, sx, sortY, 50, 16) {
+				if spSort(si) == p.sortBy {
+					p.sortAsc = !p.sortAsc
+				} else {
+					p.sortBy = spSort(si)
+					p.sortAsc = true
+				}
+				p.page = 0
+				p.selItem = -1
+				return
+			}
+		}
+		// page prev/next
+		pageY := panelY + 52
+		if isHovered(mx, my, panelX+4, pageY, 28, 22) && p.page > 0 {
+			p.page--
+			p.selItem = -1
+			return
+		}
+		nx2 := panelX + spListW - 40
+		if isHovered(mx, my, nx2, pageY, 28, 22) && p.page < p.totalPages()-1 {
+			p.page++
+			p.selItem = -1
+			return
+		}
+		// item rows (page-relative → real index)
+		page := p.catalogPage()
+		rowBaseY := float32(panelY) + 78
+		for pi, idx := range page {
+			rx := float32(panelX) + 4
+			ry := rowBaseY + float32(pi)*30
+			rw := spListW - 8
+			rh := float32(26)
 			if isHovered(mx, my, rx, ry, rw, rh) {
-				p.selItem = i
+				p.selItem = idx
 				return
 			}
 		}
@@ -438,18 +487,100 @@ func spDirBtnRect(i int) (x, y, w, h float32) {
 func spGridOriginX() float32 { return panelX + spListW + 16 }
 func spGridOriginY() float32 { return panelY + 30 }
 
-func (p *shopPanel) visibleCatalogLen() int {
-	if p.cat == spCatFood {
+func (p *shopPanel) fullLen() int {
+	switch p.cat {
+	case spCatFood:
 		return len(buyablefood.All)
-	}
-	if p.cat == spCatUtility {
+	case spCatUtility:
 		return len(roomitem.Utilities)
+	default:
+		cat := p.currentCatalog()
+		if cat == nil {
+			return 0
+		}
+		return len(cat)
 	}
-	cat := p.currentCatalog()
-	if cat == nil {
-		return 0
+}
+
+func (p *shopPanel) totalPages() int {
+	n := p.fullLen()
+	if n == 0 {
+		return 1
 	}
-	return len(cat)
+	return (n + itemsPerPage - 1) / itemsPerPage
+}
+
+// catalogPage returns the indices into the full catalog for the current page, sorted.
+func (p *shopPanel) catalogPage() []int {
+	n := p.fullLen()
+	if n == 0 {
+		return nil
+	}
+	// Build index slice
+	idxs := make([]int, n)
+	for i := range idxs {
+		idxs[i] = i
+	}
+	// Sort
+	p.sortIndices(idxs)
+	// Paginate
+	start := p.page * itemsPerPage
+	if start >= n {
+		p.page = (n - 1) / itemsPerPage
+		start = p.page * itemsPerPage
+	}
+	end := start + itemsPerPage
+	if end > n {
+		end = n
+	}
+	return idxs[start:end]
+}
+
+func (p *shopPanel) sortIndices(idxs []int) {
+	get := func(i int) (name string, price float64, vol uint) {
+		switch p.cat {
+		case spCatFood:
+			f := buyablefood.All[i]
+			return f.Name, f.BasePrice, uint(f.Width) * uint(f.Length) * uint(f.Height)
+		case spCatUtility:
+			u := roomitem.Utilities[i]
+			return u.Name, u.BasePrice, uint(u.Width) * uint(u.Length) * uint(u.Height)
+		default:
+			cat := p.currentCatalog()
+			if cat != nil && i < len(cat) {
+				it := cat[i]
+				return it.Name, it.BasePrice, uint(it.Width) * uint(it.Length) * uint(it.Height)
+			}
+		}
+		return
+	}
+
+	// Bubble sort — small N, fine for UI
+	for a := 0; a < len(idxs)-1; a++ {
+		for b := a + 1; b < len(idxs); b++ {
+			na, pa, va := get(idxs[a])
+			nb, pb, vb := get(idxs[b])
+			less := false
+			switch p.sortBy {
+			case spSortName:
+				less = na < nb
+			case spSortPrice:
+				less = pa < pb
+			case spSortVolume:
+				less = va < vb
+			}
+			if !p.sortAsc {
+				less = !less
+			}
+			if less {
+				idxs[a], idxs[b] = idxs[b], idxs[a]
+			}
+		}
+	}
+}
+
+func (p *shopPanel) visibleCatalogLen() int {
+	return len(p.catalogPage())
 }
 
 // ── draw ──────────────────────────────────────────────────────────────────────
@@ -508,29 +639,75 @@ func (p *shopPanel) drawCatalog(dst *ebiten.Image, mx, my int) {
 		drawText(dst, lbl, float64(tx)+float64(tw)/2-lw/2, float64(ty)+8, fontS, tc)
 	}
 
-	if p.cat == spCatFood {
-		for i, f := range buyablefood.All {
-			p.drawItemRow(dst, mx, my, i, f.Name,
-				fmt.Sprintf("$%.2f  [%s]  uses:%d  exp:%dd", f.BasePrice, f.Type, f.UsesTotal, f.BaseExpiryDays),
-				char.CurrentStats.Money >= f.BasePrice)
+	// sort bar
+	sortNames := []string{"Name", "Price", "Vol"}
+	sortY := panelY + 36
+	for si, sn := range sortNames {
+		sx := panelX + 4 + float32(si)*54
+		sw := float32(50)
+		sh := float32(16)
+		active := spSort(si) == p.sortBy
+		hov := isHovered(mx, my, sx, sortY, sw, sh)
+		bg := colorPanel
+		if active {
+			bg = colorSelected
+		} else if hov {
+			bg = colorHighlight
 		}
-	} else if p.cat == spCatUtility {
-		for i, u := range roomitem.Utilities {
+		fillRect(dst, sx, sortY, sw, sh, bg)
+		strokeRect(dst, sx, sortY, sw, sh, colorBorder)
+		arr := ""
+		if active {
+			if p.sortAsc {
+				arr = "▲"
+			} else {
+				arr = "▼"
+			}
+		}
+		drawText(dst, arr+sn, float64(sx)+2, float64(sortY)+4, fontS, colorText)
+	}
+
+	// page controls
+	pageY := panelY + 52
+	totalP := p.totalPages()
+	// prev
+	px := panelX + 4
+	drawButton(dst, "◀", px, pageY, 28, 22, fontS, p.page > 0 && isHovered(mx, my, px, pageY, 28, 22), p.page > 0)
+	// page label
+	pageLabel := fmt.Sprintf("Pg %d/%d", p.page+1, totalP)
+	drawText(dst, pageLabel, float64(panelX)+40, float64(pageY)+5, fontS, colorText)
+	// next
+	nx := panelX + float32(spListW) - 40
+	drawButton(dst, "▶", nx, pageY, 28, 22, fontS, p.page < totalP-1 && isHovered(mx, my, nx, pageY, 28, 22), p.page < totalP-1)
+
+	// items (page-relative)
+	page := p.catalogPage()
+	rowBaseY := panelY + 78
+	for pi, idx := range page {
+		if p.cat == spCatFood {
+			f := buyablefood.All[idx]
+			p.drawItemRowAt(dst, mx, my, pi, idx, f.Name,
+				fmt.Sprintf("$%.2f  [%s]  uses:%d  exp:%dd", f.BasePrice, f.Type, f.UsesTotal, f.BaseExpiryDays),
+				char.CurrentStats.Money >= f.BasePrice, rowBaseY)
+		} else if p.cat == spCatUtility {
+			u := roomitem.Utilities[idx]
 			detail := fmt.Sprintf("$%.2f  %dx%d", u.BasePrice, u.Width, u.Length)
 			if u.Ability != "" {
-				detail += fmt.Sprintf("  ability:%s", u.Ability)
+				detail += fmt.Sprintf("  ab:%s", u.Ability)
 			}
 			if u.CookSurface != nil {
-				detail += fmt.Sprintf("  cook-slots:%d", u.CookSurface.Slots)
+				detail += fmt.Sprintf("  cook:%d", u.CookSurface.Slots)
 			}
-			p.drawItemRow(dst, mx, my, i, u.Name, detail, char.CurrentStats.Money >= u.BasePrice)
-		}
-	} else {
-		cat := p.currentCatalog()
-		for i, item := range cat {
-			p.drawItemRow(dst, mx, my, i, item.Name,
-				fmt.Sprintf("$%.2f  %dx%d", item.BasePrice, item.Width, item.Length),
-				char.CurrentStats.Money >= item.BasePrice)
+			p.drawItemRowAt(dst, mx, my, pi, idx, u.Name, detail,
+				char.CurrentStats.Money >= u.BasePrice, rowBaseY)
+		} else {
+			cat := p.currentCatalog()
+			if cat != nil && idx < len(cat) {
+				item := cat[idx]
+				p.drawItemRowAt(dst, mx, my, pi, idx, item.Name,
+					fmt.Sprintf("$%.2f  %dx%d", item.BasePrice, item.Width, item.Length),
+					char.CurrentStats.Money >= item.BasePrice, rowBaseY)
+			}
 		}
 	}
 
@@ -544,7 +721,7 @@ func (p *shopPanel) drawCatalog(dst *ebiten.Image, mx, my int) {
 			float64(bx)+float64(bw)+12, float64(by)+10, fontM, colorGreen)
 	}
 
-	// detail row for selected item
+	// detail row for selected item (below items)
 	if p.selItem >= 0 {
 		var actions []string
 		if p.cat == spCatFood {
@@ -564,7 +741,7 @@ func (p *shopPanel) drawCatalog(dst *ebiten.Image, mx, my int) {
 				actions = item.Actions
 			}
 		}
-		iy := float64(panelY) + 42 + float64(p.visibleCatalogLen())*32 + 8
+		iy := float64(panelY) + 78 + float64(itemsPerPage)*32 + 8
 		for _, a := range actions {
 			drawText(dst, "  "+a, float64(panelX)+8, iy, fontS, colorMuted)
 			iy += 18
@@ -574,7 +751,20 @@ func (p *shopPanel) drawCatalog(dst *ebiten.Image, mx, my int) {
 
 func (p *shopPanel) drawItemRow(dst *ebiten.Image, mx, my, i int, name, detail string, affordable bool) {
 	rx, ry, rw, rh := spItemRowRect(i)
-	sel := i == p.selItem
+	p.drawRow(dst, mx, my, i, name, detail, affordable, rx, ry, rw, rh)
+}
+
+func (p *shopPanel) drawItemRowAt(dst *ebiten.Image, mx, my, pi, realIdx int, name, detail string, affordable bool, baseY float32) {
+	rx := panelX + 4
+	ry := baseY + float32(pi)*30
+	rw := spListW - 8
+	rh := float32(26)
+	// Use realIdx for selection check
+	p.drawRow(dst, mx, my, realIdx, name, detail, affordable, rx, ry, rw, rh)
+}
+
+func (p *shopPanel) drawRow(dst *ebiten.Image, mx, my, idx int, name, detail string, affordable bool, rx, ry, rw, rh float32) {
+	sel := idx == p.selItem
 	hov := isHovered(mx, my, rx, ry, rw, rh)
 	bg := colorPanel
 	if sel {

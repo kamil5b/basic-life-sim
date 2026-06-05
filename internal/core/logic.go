@@ -220,6 +220,10 @@ func canPlace(home model.Home, item model.RoomItem, x, y, z uint8, dir model.Dir
 		if !zRangeOverlaps(z, item.Height, placed.Z, placed.Item.Height) {
 			continue
 		}
+		// Overhanging items (wall shelves) don't collide with items strictly below them.
+		if item.CanOverhang && placed.Z+placed.Item.Height <= z {
+			continue
+		}
 		existingCells := occupiedCells(placed.X, placed.Y, placed.Item, placed.Direction)
 		// Direct overlap check.
 		for _, existing := range existingCells {
@@ -252,8 +256,9 @@ func canPlace(home model.Home, item model.RoomItem, x, y, z uint8, dir model.Dir
 			}
 		}
 	}
-	// If z > 0, direction must match the item directly below (same footprint, z == below.Z+below.Height).
-	if z > 0 {
+	// If z > 0 and item can overhang, no support required below.
+	// Otherwise, direction must match the item directly below (same footprint, z == below.Z+below.Height).
+	if z > 0 && !item.CanOverhang {
 		foundBelow := false
 		for _, placed := range home.RoomItems {
 			if placed.Z+placed.Item.Height != z {

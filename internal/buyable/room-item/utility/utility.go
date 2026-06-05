@@ -39,12 +39,14 @@ var Saucepan = model.Utility{
 
 func init() {
 	model.RegisterUtility(KitchenKnife, CuttingBoard, FryingPan, Wok, Saucepan)
+
+	All = []model.Utility{
+		KitchenKnife,
+		CuttingBoard,
+		FryingPan,
+		Wok,
+		Saucepan,
+	}
 }
 
-var All = []model.Utility{
-	KitchenKnife,
-	CuttingBoard,
-	FryingPan,
-	Wok,
-	Saucepan,
-}
+var All []model.Utility

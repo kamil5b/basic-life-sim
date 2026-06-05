@@ -105,13 +105,15 @@ func init() {
 		ChoppedOnion, SlicedOnion, MincedGarlic, ChoppedCarrot, SlicedCarrot,
 		SlicedTomato, SlicedCheese, GratedCheese, RiceFlour,
 	)
+
+	All = []model.Food{
+		Apple, Banana, Orange, Tomato, Avocado,
+		Broccoli, Carrot, Onion, Garlic, Lettuce,
+		Potato, Egg, ChickenBreast, BeefMince, SalmonFillet, Tofu,
+		Milk, Cheese, Butter, Yogurt,
+		Rice, Bread, Pasta, Oatmeal,
+		CookingOil, SoySauce, Salt, Pepper,
+	}
 }
 
-var All = []model.Food{
-	Apple, Banana, Orange, Tomato, Avocado,
-	Broccoli, Carrot, Onion, Garlic, Lettuce,
-	Potato, Egg, ChickenBreast, BeefMince, SalmonFillet, Tofu,
-	Milk, Cheese, Butter, Yogurt,
-	Rice, Bread, Pasta, Oatmeal,
-	CookingOil, SoySauce, Salt, Pepper,
-}
+var All []model.Food
