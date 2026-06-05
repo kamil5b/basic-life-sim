@@ -1,5 +1,17 @@
 package model
 
+// BaseItem holds fields shared by Food and Utility for placement and storage.
+type BaseItem struct {
+	Name                  string
+	BasePrice             float64
+	Width, Length, Height uint8
+}
+
+// Size returns the item's dimensions.
+func (b BaseItem) Size() (w, l, h uint8) {
+	return b.Width, b.Length, b.Height
+}
+
 // Nutrition — exact stat changes per use, UI-displayable
 type Nutrition struct {
 	Food       uint16
@@ -39,14 +51,12 @@ type ProcessResult struct {
 }
 
 type Food struct {
-	Name                  string
-	Type                  string // cooked and prepared food, cooked protein, raw protein, fruit, raw vegetable, cooked vegetable, liquid, raw carb, cooked carb, herb, dairy, seasoning
-	BasePrice             float64
-	WeightGrams           uint16
-	Width, Length, Height uint8   // space this item occupies inside a storage container or on a surface
-	BaseExpiryDays        uint16  // days until expiry at room temperature
-	UsesTotal             uint8   // how many times it can be eaten/used before it's gone
-	Temperature           float64 // in celsius
+	BaseItem
+	Type           string // cooked and prepared food, cooked protein, raw protein, fruit, raw vegetable, cooked vegetable, liquid, raw carb, cooked carb, herb, dairy, seasoning
+	WeightGrams    uint16
+	BaseExpiryDays uint16  // days until expiry at room temperature
+	UsesTotal      uint8   // how many times it can be eaten/used before it's gone
+	Temperature    float64 // in celsius
 
 	// Cooking
 	CanBeCooked  bool
