@@ -34,7 +34,7 @@ const (
 	RoomItemAppliance
 	RoomItemHygiene
 	RoomItemNeeds
-	RoomItemUtility
+	RoomItemStorage
 )
 
 // RoomItemCategory represents the quality/price tier of a room item.
@@ -125,7 +125,6 @@ type RoomItem struct {
 	Storage               *StorageCapacity // non-nil for items that can store food (fridge)
 	CookSurface           *CookCapacity    // non-nil for items that can cook food (stove, microwave)
 	UtilitySlots          uint8            // how many utilities can sit on this item (stove, counter)
-	UtilityAbility        ProcessAbility   // what this utility does (knife=chop, pan="")
 	Actions               []string         // available action verbs passed to DoAction
 	DoAction              func(input string, stat *Stats, char *Character)
 }
@@ -162,7 +161,7 @@ type PlacedRoomItem struct {
 type PlacedUtility struct {
 	X, Y, Z   uint8
 	Direction Direction
-	Item      RoomItem
+	Item      Utility
 	OnSurface []SurfaceFood // food placed inside the pan/wok
 }
 

@@ -31,9 +31,10 @@ const (
 	spCatHygiene
 	spCatFood
 	spCatUtility
+	spCatStorage
 )
 
-var spCatLabels = []string{"Appliances", "Furniture", "Hygiene", "Food", "Utilities"}
+var spCatLabels = []string{"Appliances", "Furniture", "Hygiene", "Food", "Utilities", "Storage"}
 
 type shopPanel struct {
 	char    *model.Character
@@ -43,8 +44,9 @@ type shopPanel struct {
 	mode    spMode
 
 	// placement state
-	pendingItem *model.RoomItem
-	pendingFood *model.Food
+	pendingItem    *model.RoomItem
+	pendingFood    *model.Food
+	pendingUtility *model.Utility
 	// foodX/Y used only for floor-food fallback (food skips the 3-step wizard)
 	foodX, foodY  uint8
 	wizard        *placementWizard
@@ -71,8 +73,8 @@ func (p *shopPanel) currentCatalog() []model.RoomItem {
 		return roomitem.Furniture
 	case spCatHygiene:
 		return roomitem.Hygiene
-	case spCatUtility:
-		return roomitem.Utilities
+	case spCatStorage:
+		return roomitem.Storage
 	}
 	return nil
 }
@@ -205,6 +207,19 @@ func (p *shopPanel) update() {
 // tryBeginPlace validates affordability then switches to grid placement mode.
 func (p *shopPanel) tryBeginPlace() {
 	char := p.char
+	if p.cat == spCatUtility {
+		u := roomitem.Utilities[p.selItem]
+		if char.CurrentStats.Money < u.BasePrice {
+			p.main.setMessage(fmt.Sprintf("Not enough money. Need $%.2f", u.BasePrice))
+			return
+		}
+		char.CurrentStats.Money -= u.BasePrice
+		p.pendingUtility = &u
+		// Utilities go to inventory — place on host later via Room panel.
+		p.main.setMessage(fmt.Sprintf("Bought %s — place it on a stove/desk via Room tab. Money: $%.2f", u.Name, char.CurrentStats.Money))
+		p.selItem = -1
+		return
+	}
 	if p.cat == spCatFood {
 		f := buyablefood.All[p.selItem]
 		if char.CurrentStats.Money < f.BasePrice {
@@ -239,6 +254,7 @@ func (p *shopPanel) tryBeginPlace() {
 func (p *shopPanel) cancelPlace() {
 	p.pendingItem = nil
 	p.pendingFood = nil
+	p.pendingUtility = nil
 	p.wizard = nil
 	p.mode = spModeCatalog
 
@@ -426,6 +442,9 @@ func (p *shopPanel) visibleCatalogLen() int {
 	if p.cat == spCatFood {
 		return len(buyablefood.All)
 	}
+	if p.cat == spCatUtility {
+		return len(roomitem.Utilities)
+	}
 	cat := p.currentCatalog()
 	if cat == nil {
 		return 0
@@ -495,6 +514,17 @@ func (p *shopPanel) drawCatalog(dst *ebiten.Image, mx, my int) {
 				fmt.Sprintf("$%.2f  [%s]  uses:%d  exp:%dd", f.BasePrice, f.Type, f.UsesTotal, f.BaseExpiryDays),
 				char.CurrentStats.Money >= f.BasePrice)
 		}
+	} else if p.cat == spCatUtility {
+		for i, u := range roomitem.Utilities {
+			detail := fmt.Sprintf("$%.2f  %dx%d", u.BasePrice, u.Width, u.Length)
+			if u.Ability != "" {
+				detail += fmt.Sprintf("  ability:%s", u.Ability)
+			}
+			if u.CookSurface != nil {
+				detail += fmt.Sprintf("  cook-slots:%d", u.CookSurface.Slots)
+			}
+			p.drawItemRow(dst, mx, my, i, u.Name, detail, char.CurrentStats.Money >= u.BasePrice)
+		}
 	} else {
 		cat := p.currentCatalog()
 		for i, item := range cat {
@@ -521,6 +551,11 @@ func (p *shopPanel) drawCatalog(dst *ebiten.Image, mx, my int) {
 			if p.selItem < len(buyablefood.All) {
 				f := buyablefood.All[p.selItem]
 				actions = []string{fmt.Sprintf("Type: %s  |  Uses: %d  |  Expires in %d days", f.Type, f.UsesTotal, f.BaseExpiryDays)}
+			}
+		} else if p.cat == spCatUtility {
+			if p.selItem < len(roomitem.Utilities) {
+				u := roomitem.Utilities[p.selItem]
+				actions = u.Actions
 			}
 		} else {
 			cat := p.currentCatalog()

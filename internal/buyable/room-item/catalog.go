@@ -4,6 +4,7 @@ import (
 	"github.com/kamil5b/basic-life-sim/internal/buyable/room-item/appliance"
 	"github.com/kamil5b/basic-life-sim/internal/buyable/room-item/furniture"
 	"github.com/kamil5b/basic-life-sim/internal/buyable/room-item/hygiene"
+	"github.com/kamil5b/basic-life-sim/internal/buyable/room-item/storage"
 	"github.com/kamil5b/basic-life-sim/internal/buyable/room-item/utility"
 	"github.com/kamil5b/basic-life-sim/internal/model"
 )
@@ -36,10 +37,17 @@ var Hygiene = []model.RoomItem{
 	hygiene.BidetToilet,
 }
 
-var Utilities = []model.RoomItem{
-	utility.KitchenKnife,
-	utility.CuttingBoard,
-	utility.FryingPan,
-	utility.Wok,
-	utility.Saucepan,
+var Utilities = utility.All
+
+var Storage = []model.RoomItem{
+	storage.BasicCupboard,
+	storage.DoubleCupboard,
+	storage.TallPantry,
+	storage.WallShelfSmall,
+	storage.WallShelfMedium,
+	storage.WallShelfLong,
+	storage.BasicRack,
+	storage.WideRack,
+	storage.ShelfDesk,
+	storage.RackDesk,
 }
