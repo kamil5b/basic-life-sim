@@ -309,9 +309,10 @@ func dirStepXY(dir model.Direction) (dx, dy int) {
 func occupiedFoodSlots(placed *model.PlacedRoomItem) map[[3]uint8]bool {
 	occupied := make(map[[3]uint8]bool)
 	for _, s := range placed.Stored {
-		for dz := uint8(0); dz < s.Food.Height; dz++ {
-			for dy := uint8(0); dy < s.Food.Length; dy++ {
-				for dx := uint8(0); dx < s.Food.Width; dx++ {
+		w, l, h := s.Dims()
+		for dz := uint8(0); dz < h; dz++ {
+			for dy := uint8(0); dy < l; dy++ {
+				for dx := uint8(0); dx < w; dx++ {
 					occupied[[3]uint8{s.SlotX + dx, s.SlotY + dy, s.SlotZ + dz}] = true
 				}
 			}
@@ -324,13 +325,13 @@ func usedSlotCount(placed *model.PlacedRoomItem) int {
 	return len(occupiedFoodSlots(placed))
 }
 
-func canFitFood(occupied map[[3]uint8]bool, cap *model.StorageCapacity, f model.Food, ax, ay, az uint8) bool {
-	if ax+f.Width > cap.Width || ay+f.Length > cap.Length || az+f.Height > cap.Height {
+func canFitItem(occupied map[[3]uint8]bool, cap *model.StorageCapacity, w, l, h uint8, ax, ay, az uint8) bool {
+	if ax+w > cap.Width || ay+l > cap.Length || az+h > cap.Height {
 		return false
 	}
-	for dz := uint8(0); dz < f.Height; dz++ {
-		for dy := uint8(0); dy < f.Length; dy++ {
-			for dx := uint8(0); dx < f.Width; dx++ {
+	for dz := uint8(0); dz < h; dz++ {
+		for dy := uint8(0); dy < l; dy++ {
+			for dx := uint8(0); dx < w; dx++ {
 				if occupied[[3]uint8{ax + dx, ay + dy, az + dz}] {
 					return false
 				}
@@ -340,12 +341,12 @@ func canFitFood(occupied map[[3]uint8]bool, cap *model.StorageCapacity, f model.
 	return true
 }
 
-func nextFreeSlot(placed *model.PlacedRoomItem, cap *model.StorageCapacity, f model.Food) ([3]uint8, bool) {
+func nextFreeSlot(placed *model.PlacedRoomItem, cap *model.StorageCapacity, w, l, h uint8) ([3]uint8, bool) {
 	occupied := occupiedFoodSlots(placed)
 	for z := uint8(0); z < cap.Height; z++ {
 		for y := uint8(0); y < cap.Length; y++ {
 			for x := uint8(0); x < cap.Width; x++ {
-				if canFitFood(occupied, cap, f, x, y, z) {
+				if canFitItem(occupied, cap, w, l, h, x, y, z) {
 					return [3]uint8{x, y, z}, true
 				}
 			}
@@ -527,4 +528,31 @@ func matchesIngredient(ing model.MixIngredient, f model.Food) bool {
 		return f.Type == ing.FoodType
 	}
 	return false
+}
+
+// tryUseUtilityOnFood attempts to use a utility on food at the same cell.
+func tryUseUtilityOnFood(char *model.Character, foodIdx, utilIdx int) {
+	if foodIdx < 0 || foodIdx >= len(char.CurrentHome.FloorItems) {
+		return
+	}
+	if utilIdx < 0 || utilIdx >= len(char.CurrentHome.FloorItems) {
+		return
+	}
+	food := &char.CurrentHome.FloorItems[foodIdx]
+	util := &char.CurrentHome.FloorItems[utilIdx]
+	if food.Kind != model.FloorKindFood || util.Kind != model.FloorKindUtility {
+		return
+	}
+	if util.Utility.Ability != "" {
+		for _, pr := range food.Food.ProcessResults {
+			if pr.Ability == util.Utility.Ability {
+				if result, ok := model.FoodRegistry[pr.ResultName]; ok {
+					result.UsesTotal = food.UsesRemaining
+					food.Food = result
+					food.UsesRemaining = result.UsesTotal
+				}
+				return
+			}
+		}
+	}
 }

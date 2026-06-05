@@ -348,13 +348,14 @@ func (w *fridgeWizard) update() bool {
 				f := applyRotation(*w.pendingFood, w.rotationIdx)
 				slotZ := computeSlotZ(f.Height)
 				occupied := occupiedFoodSlots(placed)
-				if canFitFood(occupied, storage, f, slotX, slotY, slotZ) {
+				if canFitItem(occupied, storage, f.Width, f.Length, f.Height, slotX, slotY, slotZ) {
 					mult := storage.MultiplierAt(slotX, slotY, slotZ)
 					if w.chargeMoney {
 						w.char.CurrentStats.Money -= w.pendingFood.BasePrice
 					}
-					placed.Stored = append(placed.Stored, model.StoredFood{
+					placed.Stored = append(placed.Stored, model.StoredItem{
 						SlotX: slotX, SlotY: slotY, SlotZ: slotZ,
+						Kind:           model.FloorKindFood,
 						PurchaseDate:   w.char.CurrentDate,
 						MultiplierUsed: mult,
 						UsesRemaining:  f.UsesTotal,
@@ -463,7 +464,7 @@ func (w *fridgeWizard) update() bool {
 					tZv = 0
 				}
 				tZ := uint8(tZv)
-				if canFitFood(occupied, storage, mf, tX, tY, tZ) {
+				if canFitItem(occupied, storage, mf.Width, mf.Length, mf.Height, tX, tY, tZ) {
 					sf.Food = mf
 					sf.SlotX, sf.SlotY, sf.SlotZ = tX, tY, tZ
 					sf.MultiplierUsed = storage.MultiplierAt(tX, tY, tZ)
@@ -532,7 +533,7 @@ func (w *fridgeWizard) draw(dst *ebiten.Image) {
 			expiry := model.ExpiryDate(char.CurrentDate, f.BaseExpiryDays, mult)
 			ey, em, ed := expiry.Unpack()
 			occupied := occupiedFoodSlots(&char.CurrentHome.RoomItems[w.fridgeIdx])
-			canPlace := canFitFood(occupied, storage, f, slotX, slotY, slotZBottom)
+			canPlace := canFitItem(occupied, storage, f.Width, f.Length, f.Height, slotX, slotY, slotZBottom)
 			col := colorGreen
 			zDesc := fmt.Sprintf("z=%d", w.selZ)
 			if f.Height > 1 {

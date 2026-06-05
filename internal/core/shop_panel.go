@@ -22,6 +22,7 @@ const (
 	spModePlaceDir                    // pick a facing direction
 	spModeStackConfirm                // confirm mix vs separate stack
 	spModeStorageChoice               // choose which storage item to place food into
+	spModeUtilityChoice               // use utility on food vs place separately
 )
 
 type spCategory int
@@ -68,6 +69,7 @@ type shopPanel struct {
 	wizard         *placementWizard
 	stackFloorIdx  int   // index in FloorItems of the food being stacked onto (-1 = none)
 	storageOptions []int // indices into RoomItems for storage choice
+	utilOptionIdx  int   // index in FloorItems of utility being used on food
 
 	// fridge placement state
 	fridgeWiz *fridgeWizard
@@ -294,7 +296,37 @@ func (p *shopPanel) update() {
 			}
 		}
 
-		// ── pick Z / Dir: delegate to wizard ─────────────────────────────────────────────
+	case spModeUtilityChoice:
+		if !clicked {
+			return
+		}
+		f := *p.pendingFood
+		// Cancel
+		cx2, cy2, cw, ch := spCancelBtnRect()
+		if isHovered(mx, my, cx2, cy2, cw, ch) {
+			p.cancelPlace()
+			p.utilOptionIdx = -1
+			return
+		}
+		if p.utilOptionIdx >= 0 && p.utilOptionIdx < len(p.char.CurrentHome.FloorItems) {
+			util := p.char.CurrentHome.FloorItems[p.utilOptionIdx]
+			// Place separately
+			sx, sy, sw, sh := spStackSepBtnRect()
+			if isHovered(mx, my, sx, sy, sw, sh) {
+				p.placeFoodOnFloor(&f)
+				p.utilOptionIdx = -1
+				return
+			}
+			// Use utility
+			mx2, my2, mw, mh := spStackMixBtnRect()
+			if isHovered(mx, my, mx2, my2, mw, mh) {
+				p.useUtilityOnFood(&f, util)
+				p.utilOptionIdx = -1
+				return
+			}
+		}
+
+	// ── pick Z / Dir: delegate to wizard ─────────────────────────────────────────────
 	case spModePlaceZ, spModePlaceDir:
 		if p.wizard != nil {
 			p.wizard.update()
@@ -451,6 +483,27 @@ func (p *shopPanel) finalizeFoodPlace() {
 		return
 	}
 
+	// Check if there's a utility at this cell the food can interact with
+	for i, fi := range char.CurrentHome.FloorItems {
+		if fi.Kind != model.FloorKindUtility || fi.X != p.foodX || fi.Y != p.foodY {
+			continue
+		}
+		// Utility can hold food on its surface (pan/wok) — but must be placed on host first
+		if fi.Utility.CookSurface != nil {
+			// Skip — pans on floor can't hold food; they need to be on a stove
+		}
+		// Utility can process food (knife → chop, etc.)
+		if fi.Utility.Ability != "" {
+			for _, pr := range f.ProcessResults {
+				if pr.Ability == fi.Utility.Ability {
+					p.utilOptionIdx = i
+					p.mode = spModeUtilityChoice
+					return
+				}
+			}
+		}
+	}
+
 	// Place on floor, stacking Z on top of any existing food
 	nextZ := nextFoodZ(char, p.foodX, p.foodY)
 	char.CurrentStats.Money -= f.BasePrice
@@ -486,6 +539,48 @@ func (p *shopPanel) finalizeUtilityPlace() {
 	})
 	p.main.setMessage(fmt.Sprintf("Bought %s → floor (%d,%d). Money: $%.2f", u.Name, p.foodX, p.foodY, char.CurrentStats.Money))
 	p.pendingUtility = nil
+	p.mode = spModeCatalog
+}
+
+func (p *shopPanel) placeFoodOnFloor(f *model.Food) {
+	char := p.char
+	nextZ := nextFoodZ(char, p.foodX, p.foodY)
+	char.CurrentStats.Money -= f.BasePrice
+	char.CurrentHome.FloorItems = append(char.CurrentHome.FloorItems, model.FloorItem{
+		X: p.foodX, Y: p.foodY, Z: nextZ,
+		Kind:          model.FloorKindFood,
+		PurchaseDate:  char.CurrentDate,
+		UsesRemaining: f.UsesTotal,
+		Food:          *f,
+	})
+	p.main.setMessage(fmt.Sprintf("Placed %s on floor.", f.Name))
+	p.pendingFood = nil
+	p.mode = spModeCatalog
+}
+
+func (p *shopPanel) useUtilityOnFood(f *model.Food, util model.FloorItem) {
+	char := p.char
+	char.CurrentStats.Money -= f.BasePrice
+	if util.Utility.Ability != "" {
+		// Process food with utility ability
+		for _, pr := range f.ProcessResults {
+			if pr.Ability == util.Utility.Ability {
+				if result, ok := model.FoodRegistry[pr.ResultName]; ok {
+					result.UsesTotal = f.UsesTotal
+					char.CurrentHome.FloorItems = append(char.CurrentHome.FloorItems, model.FloorItem{
+						X: p.foodX, Y: p.foodY, Z: 0,
+						Kind:          model.FloorKindFood,
+						PurchaseDate:  char.CurrentDate,
+						UsesRemaining: result.UsesTotal,
+						Food:          result,
+					})
+					p.main.setMessage(fmt.Sprintf("Used %s → %s.", util.Utility.Name, result.Name))
+				}
+				break
+			}
+		}
+	}
+	p.pendingFood = nil
 	p.mode = spModeCatalog
 }
 
@@ -672,6 +767,8 @@ func (p *shopPanel) draw(dst *ebiten.Image) {
 		p.drawStackConfirm(dst, mx, my)
 	case spModeStorageChoice:
 		p.drawStorageChoice(dst, mx, my)
+	case spModeUtilityChoice:
+		p.drawUtilityChoice(dst, mx, my)
 	case spModePlaceZ, spModePlaceDir:
 		if p.wizard != nil {
 			p.wizard.drawLeftPanel(dst, mx, my)
@@ -900,6 +997,30 @@ func (p *shopPanel) drawStorageChoice(dst *ebiten.Image, mx, my int) {
 			usedSlotCount(&char.CurrentHome.RoomItems[fri]), placed.Item.Storage.TotalSlots())
 		drawButton(dst, label, bx, by, bw, bh, fontS, isHovered(mx, my, bx, by, bw, bh), true)
 	}
+
+	cx2, cy2, cw, ch := spCancelBtnRect()
+	drawButton(dst, "✕ Cancel", cx2, cy2, cw, ch, fontS, isHovered(mx, my, cx2, cy2, cw, ch), true)
+}
+
+func (p *shopPanel) drawUtilityChoice(dst *ebiten.Image, mx, my int) {
+	if p.pendingFood == nil || p.utilOptionIdx < 0 || p.utilOptionIdx >= len(p.char.CurrentHome.FloorItems) {
+		return
+	}
+	f := *p.pendingFood
+	util := p.char.CurrentHome.FloorItems[p.utilOptionIdx]
+	lx := float64(panelX) + 12
+	drawText(dst, "Use Utility?", lx, float64(panelY)+16, fontM, colorAccent)
+	drawText(dst, fmt.Sprintf("%s + %s", f.Name, util.Utility.Name), lx, float64(panelY)+44, fontS, colorText)
+
+	mx2, my2, mw, mh := spStackMixBtnRect()
+	label := fmt.Sprintf("Use %s", util.Utility.Name)
+	if util.Utility.CookSurface != nil {
+		label = fmt.Sprintf("Place on %s", util.Utility.Name)
+	}
+	drawButton(dst, label, mx2, my2, mw, mh, fontM, isHovered(mx, my, mx2, my2, mw, mh), true)
+
+	sx, sy, sw, sh := spStackSepBtnRect()
+	drawButton(dst, "Place Separately", sx, sy, sw, sh, fontM, isHovered(mx, my, sx, sy, sw, sh), true)
 
 	cx2, cy2, cw, ch := spCancelBtnRect()
 	drawButton(dst, "✕ Cancel", cx2, cy2, cw, ch, fontS, isHovered(mx, my, cx2, cy2, cw, ch), true)

@@ -164,15 +164,16 @@ func (p *foodPanel) update() {
 		}
 		placed := &char.CurrentHome.RoomItems[fridges[0]]
 		cap := placed.Item.Storage
-		slot, ok := nextFreeSlot(placed, cap, src.food)
+		slot, ok := nextFreeSlot(placed, cap, src.food.Width, src.food.Length, src.food.Height)
 		if !ok {
 			p.main.setMessage("Fridge is full!")
 			return
 		}
 		mult := cap.MultiplierAt(slot[0], slot[1], slot[2])
 		removeFoodEntirely(char, src.kind, src.itemIdx, src.foodIdx)
-		placed.Stored = append(placed.Stored, model.StoredFood{
+		placed.Stored = append(placed.Stored, model.StoredItem{
 			SlotX: slot[0], SlotY: slot[1], SlotZ: slot[2],
+			Kind:           model.FloorKindFood,
 			PurchaseDate:   src.purchaseDate,
 			MultiplierUsed: mult,
 			UsesRemaining:  src.usesRemaining,

@@ -34,6 +34,7 @@ type roomPanel struct {
 	floorMoveMode           bool // true = waiting for user to click target cell
 	floorFoodFridgeTarget   int  // RoomItems index of fridge being targeted (-1 = none)
 	floorFoodFridgeTargetXY [2]int
+	utilTarget              int // FloorItems index of utility being targeted for interaction
 }
 
 type rpMode int
@@ -48,6 +49,7 @@ const (
 	rpModeFridgeGrid                          // organising food inside a fridge (unused — handled by fridgeWiz)
 	rpModeFloorItemAction                     // action picker for a selected floor item (food or utility)
 	rpModeFloorFoodFridgeChoice               // "In World" vs "In Fridge" when dropping food onto a fridge cell
+	rpModeUtilityChoice                       // use utility on food vs place separately
 )
 
 func newRoomPanel(char *model.Character, main *mainScreen) *roomPanel {
@@ -303,11 +305,21 @@ func (p *roomPanel) update() {
 				return
 			}
 		} else {
-			// Use
+			// Use — check for food at same cell to process
 			ex, ey, ew, eh := rpFloorFoodEatBtnRect()
 			if clicked && isHovered(mx, my, ex, ey, ew, eh) && !p.floorMoveMode {
-				fi.Utility.DoAction("use", &p.char.CurrentStats, p.char)
-				p.main.setMessage(fmt.Sprintf("Used %s.", fi.Utility.Name))
+				processed := false
+				for oi, o := range p.char.CurrentHome.FloorItems {
+					if o.Kind == model.FloorKindFood && o.X == fi.X && o.Y == fi.Y {
+						tryUseUtilityOnFood(p.char, oi, p.selFloorItem)
+						processed = true
+						break
+					}
+				}
+				if !processed {
+					fi.Utility.DoAction("use", &p.char.CurrentStats, p.char)
+					p.main.setMessage(fmt.Sprintf("Used %s.", fi.Utility.Name))
+				}
 			}
 		}
 
@@ -348,9 +360,49 @@ func (p *roomPanel) update() {
 				if !isFood {
 					name = fi.Utility.Name
 				}
+				// If food moved onto a utility, offer choice
+				if isFood {
+					for oi, o := range p.char.CurrentHome.FloorItems {
+						if o.Kind == model.FloorKindUtility && int(o.X) == gx && int(o.Y) == gy && o.Utility.Ability != "" {
+							fi.X = uint8(gx)
+							fi.Y = uint8(gy)
+							p.utilTarget = oi
+							p.floorMoveMode = false
+							p.selCell = [2]int{gx, gy}
+							p.mode = rpModeUtilityChoice
+							return
+						}
+					}
+				}
 				p.main.setMessage(fmt.Sprintf("Moved %s to (%d,%d).", name, gx, gy))
-				p.floorMoveMode = false
 			}
+		}
+
+	case rpModeUtilityChoice:
+		if p.selFloorItem < 0 || p.utilTarget < 0 {
+			p.mode = rpModeFiltered
+			return
+		}
+		bx, by, bw, bh := rpBackBtnRect()
+		if clicked && isHovered(mx, my, bx, by, bw, bh) {
+			p.utilTarget = -1
+			p.mode = rpModeFiltered
+			return
+		}
+		// Use utility
+		mx2, my2, mw, mh := rpFloorFoodEatBtnRect()
+		if clicked && isHovered(mx, my, mx2, my2, mw, mh) {
+			tryUseUtilityOnFood(p.char, p.selFloorItem, p.utilTarget)
+			p.utilTarget = -1
+			p.mode = rpModeFiltered
+			return
+		}
+		// Place separately (just stay, already moved)
+		mmx, mmy, mmw, mmh := rpFloorFoodMoveBtnRect()
+		if clicked && isHovered(mx, my, mmx, mmy, mmw, mmh) {
+			p.utilTarget = -1
+			p.mode = rpModeFiltered
+			return
 		}
 
 	case rpModeFloorFoodFridgeChoice:
@@ -945,6 +997,25 @@ func (p *roomPanel) draw(dst *ebiten.Image) {
 			obx, oby, obw, obh := rpOrganizeBtnRect()
 			drawButton(dst, "📦 Organize", obx, oby, obw, obh, fontS, isHovered(mx, my, obx, oby, obw, obh), true)
 		}
+
+	case rpModeUtilityChoice:
+		if p.selFloorItem < 0 || p.utilTarget < 0 ||
+			p.selFloorItem >= len(char.CurrentHome.FloorItems) ||
+			p.utilTarget >= len(char.CurrentHome.FloorItems) {
+			return
+		}
+		fi := char.CurrentHome.FloorItems[p.selFloorItem]
+		util := char.CurrentHome.FloorItems[p.utilTarget]
+		drawText(dst, "Use Utility?", float64(rpListX), float64(panelY)+16, fontM, colorAccent)
+		drawText(dst, fmt.Sprintf("%s + %s", fi.Food.Name, util.Utility.Name),
+			float64(rpListX), float64(panelY)+44, fontS, colorText)
+
+		ex, ey, ew, eh := rpFloorFoodEatBtnRect()
+		drawButton(dst, fmt.Sprintf("Use %s", util.Utility.Name), ex, ey, ew, eh, fontS, isHovered(mx, my, ex, ey, ew, eh), true)
+		mmx, mmy, mmw, mmh := rpFloorFoodMoveBtnRect()
+		drawButton(dst, "Place Separately", mmx, mmy, mmw, mmh, fontS, isHovered(mx, my, mmx, mmy, mmw, mmh), true)
+		bx, by, bw, bh := rpBackBtnRect()
+		drawButton(dst, "← Back", bx, by, bw, bh, fontS, isHovered(mx, my, bx, by, bw, bh), true)
 
 	case rpModeFloorItemAction:
 		if p.selFloorItem < 0 || p.selFloorItem >= len(char.CurrentHome.FloorItems) {

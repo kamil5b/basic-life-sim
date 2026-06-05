@@ -138,6 +138,25 @@ type StoredFood struct {
 	Food                Food
 }
 
+// StoredItem is a food or utility occupying a slot inside a storage container.
+type StoredItem struct {
+	SlotX, SlotY, SlotZ uint8
+	Kind                FloorItemKind
+	PurchaseDate        CompactDate // food only: date bought
+	MultiplierUsed      float32     // food only: effective expiry multiplier
+	UsesRemaining       uint8       // food: decrements on eat; utility: unused
+	Food                Food        // set when Kind == FloorKindFood
+	Utility             Utility     // set when Kind == FloorKindUtility
+}
+
+// Size returns the dimensions of whatever is stored.
+func (s StoredItem) Dims() (w, l, h uint8) {
+	if s.Kind == FloorKindFood {
+		return s.Food.Width, s.Food.Length, s.Food.Height
+	}
+	return s.Utility.Width, s.Utility.Length, s.Utility.Height
+}
+
 // SurfaceFood is a food item resting on a cooking appliance surface (placed there by the player).
 type SurfaceFood struct {
 	PurchaseDate  CompactDate
@@ -152,7 +171,7 @@ type PlacedRoomItem struct {
 	Z         uint8
 	Direction Direction
 	Item      RoomItem
-	Stored    []StoredFood    // food stored inside (fridge)
+	Stored    []StoredItem    // food & utilities stored inside
 	OnSurface []SurfaceFood   // food resting on the surface (stove/microwave)
 	Utilities []PlacedUtility // utilities placed on this item
 }
