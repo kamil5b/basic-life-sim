@@ -50,6 +50,7 @@ const (
 	rpModeFloorItemAction                     // action picker for a selected floor item (food or utility)
 	rpModeFloorFoodFridgeChoice               // "In World" vs "In Fridge" when dropping food onto a fridge cell
 	rpModeUtilityChoice                       // use utility on food vs place separately
+	rpModeTimeSkip                            // choose how many hours to skip for an activity
 )
 
 func newRoomPanel(char *model.Character, main *mainScreen) *roomPanel {
@@ -264,6 +265,10 @@ func (p *roomPanel) update() {
 			ax, ay, aw, ah := rpActionRowRect(i)
 			if clicked && isHovered(mx, my, ax, ay, aw, ah) {
 				p.selAct = i
+				if canSkipTime(act) {
+					p.mode = rpModeTimeSkip
+					return
+				}
 				p.executeAction(placed, act)
 			}
 		}
@@ -468,6 +473,37 @@ func (p *roomPanel) update() {
 			)
 			p.floorFoodFridgeTarget = -1
 			return
+		}
+
+	case rpModeTimeSkip:
+		if p.selItem < 0 || p.selItem >= len(p.char.CurrentHome.RoomItems) {
+			p.mode = rpModeAction
+			return
+		}
+		placed := &p.char.CurrentHome.RoomItems[p.selItem]
+		if p.selAct < 0 || p.selAct >= len(placed.Item.Actions) {
+			p.mode = rpModeAction
+			return
+		}
+		action := placed.Item.Actions[p.selAct]
+
+		bx, by, bw, bh := rpBackBtnRect()
+		if clicked && isHovered(mx, my, bx, by, bw, bh) {
+			p.mode = rpModeAction
+			return
+		}
+
+		hours := []int{1, 2, 4, 8}
+		for i, h := range hours {
+			ax, ay, aw, ah := rpActionRowRect(i)
+			ay += 40
+			if clicked && isHovered(mx, my, ax, ay, aw, ah) {
+				advanceTime(p.char, float64(h)*60)
+				p.executeAction(placed, action)
+				p.main.setMessage(fmt.Sprintf("%s for %d hour(s). Time advanced.", action, h))
+				p.mode = rpModeAction
+				return
+			}
 		}
 
 	case rpModeMoveGrid, rpModeMoveZ, rpModeMoveDir:
@@ -1113,6 +1149,26 @@ func (p *roomPanel) draw(dst *ebiten.Image) {
 		}
 		if p.wizard != nil && p.wizard.err != "" {
 			drawTextWrapped(dst, p.wizard.err, float64(rpListX), float64(panelY)+54, float64(rpListW), 18, fontS, colorRed)
+		}
+		bx, by, bw, bh := rpBackBtnRect()
+		drawButton(dst, "← Cancel", bx, by, bw, bh, fontS, isHovered(mx, my, bx, by, bw, bh), true)
+
+	case rpModeTimeSkip:
+		if p.selItem < 0 || p.selItem >= len(char.CurrentHome.RoomItems) {
+			return
+		}
+		placed := char.CurrentHome.RoomItems[p.selItem]
+		drawText(dst, placed.Item.Name, float64(rpListX), float64(panelY)+4, fontM, colorAccent)
+		if p.selAct >= 0 && p.selAct < len(placed.Item.Actions) {
+			drawText(dst, fmt.Sprintf("Choose duration for: %s", placed.Item.Actions[p.selAct]),
+				float64(rpListX), float64(panelY)+28, fontS, colorText)
+		}
+		hours := []int{1, 2, 4, 8}
+		for i, h := range hours {
+			ax, ay, aw, ah := rpActionRowRect(i)
+			ay += 40
+			hov := isHovered(mx, my, ax, ay, aw, ah)
+			drawButton(dst, fmt.Sprintf("%d hour(s)", h), ax, ay, aw, ah, fontM, hov, true)
 		}
 		bx, by, bw, bh := rpBackBtnRect()
 		drawButton(dst, "← Cancel", bx, by, bw, bh, fontS, isHovered(mx, my, bx, by, bw, bh), true)

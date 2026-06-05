@@ -38,6 +38,12 @@ func DaysBetween(from, to CompactDate) int {
 	return int(to.AsTime().Sub(from.AsTime()).Hours() / 24)
 }
 
+// AddDays returns a new CompactDate advanced by the given number of days.
+func (cd CompactDate) AddDays(days int) CompactDate {
+	t := cd.AsTime().AddDate(0, 0, days)
+	return NewCompactDate(t.Year(), int(t.Month()), t.Day())
+}
+
 // ExpiryDate computes the expiry date given a purchase date, base expiry days, and a storage multiplier.
 // A multiplier <= 0 is treated as 1 (room temperature, no extension).
 func ExpiryDate(purchaseDate CompactDate, baseExpiryDays uint16, multiplier float32) CompactDate {

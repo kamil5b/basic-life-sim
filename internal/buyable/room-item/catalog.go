@@ -39,6 +39,21 @@ var Hygiene = []model.RoomItem{
 
 var Utilities = utility.All
 
+func init() {
+	for _, item := range Appliances {
+		model.RegisterRoomItem(item)
+	}
+	for _, item := range Furniture {
+		model.RegisterRoomItem(item)
+	}
+	for _, item := range Hygiene {
+		model.RegisterRoomItem(item)
+	}
+	for _, item := range Storage {
+		model.RegisterRoomItem(item)
+	}
+}
+
 var Storage = []model.RoomItem{
 	storage.BasicCupboard,
 	storage.DoubleCupboard,

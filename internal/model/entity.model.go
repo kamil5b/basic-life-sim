@@ -291,4 +291,27 @@ type Character struct {
 	Strength   NeedStat
 
 	CurrentStats Stats
+
+	Hour      uint8
+	Minute    uint8
+	SubMinute float64 // accumulated fractional minutes
+	TimeScale float64 // game minutes per real second
+}
+
+// RoomItemRegistry maps item names to their static definitions.
+var RoomItemRegistry = map[string]RoomItem{}
+
+func RegisterRoomItem(list ...RoomItem) {
+	for _, r := range list {
+		RoomItemRegistry[r.Name] = r
+	}
+}
+
+// ExperienceRegistry maps experience names to their static definitions.
+var ExperienceRegistry = map[string]Experience{}
+
+func RegisterExperience(list ...Experience) {
+	for _, e := range list {
+		ExperienceRegistry[e.Name] = e
+	}
 }
