@@ -47,11 +47,14 @@ func newFoodPanel(char *model.Character, main *mainScreen) *foodPanel {
 func (p *foodPanel) gatherSources() []foodSource {
 	char := p.char
 	var out []foodSource
-	for i, f := range char.CurrentHome.FloorFood {
+	for i, fi := range char.CurrentHome.FloorItems {
+		if fi.Kind != model.FloorKindFood {
+			continue
+		}
 		out = append(out, foodSource{
-			label: f.Food.Name, purchaseDate: f.PurchaseDate,
-			multiplier: 1, usesRemaining: f.UsesRemaining,
-			food: f.Food, kind: "floor", foodIdx: i,
+			label: fi.Food.Name, purchaseDate: fi.PurchaseDate,
+			multiplier: 1, usesRemaining: fi.UsesRemaining,
+			food: fi.Food, kind: "floor", foodIdx: i,
 		})
 	}
 	for ri, placed := range char.CurrentHome.RoomItems {
@@ -100,8 +103,8 @@ func (p *foodPanel) update() {
 				if src.kind == "floor" {
 					// move to target cell
 					char := p.char
-					char.CurrentHome.FloorFood[src.foodIdx].X = uint8(gx)
-					char.CurrentHome.FloorFood[src.foodIdx].Y = uint8(gy)
+					char.CurrentHome.FloorItems[src.foodIdx].X = uint8(gx)
+					char.CurrentHome.FloorItems[src.foodIdx].Y = uint8(gy)
 					p.main.setMessage(fmt.Sprintf("Moved %s to (%d,%d).", src.food.Name, gx, gy))
 				}
 				p.mode = fpModeNormal
@@ -219,8 +222,9 @@ func (p *foodPanel) update() {
 		newFood := src.food
 		newFood.BaseExpiryDays = uint16(remaining)
 		removeFoodEntirely(char, src.kind, src.itemIdx, src.foodIdx)
-		char.CurrentHome.FloorFood = append(char.CurrentHome.FloorFood, model.PlacedFood{
+		char.CurrentHome.FloorItems = append(char.CurrentHome.FloorItems, model.FloorItem{
 			X: 0, Y: 0, Z: 0,
+			Kind:          model.FloorKindFood,
 			PurchaseDate:  char.CurrentDate,
 			UsesRemaining: src.usesRemaining,
 			Food:          newFood,
@@ -401,10 +405,14 @@ func (p *foodPanel) draw(dst *ebiten.Image) {
 				}
 			}
 			// floor food overlay
-			for _, ff := range home.FloorFood {
-				cellX := ox + float32(ff.X)*rpCellSz
-				cellY := oy + float32(ff.Y)*rpCellSz
-				fillRect(dst, cellX+8, cellY+8, rpCellSz-17, rpCellSz-17, colorFoodFloor)
+			for _, fi := range home.FloorItems {
+				cellX := ox + float32(fi.X)*rpCellSz
+				cellY := oy + float32(fi.Y)*rpCellSz
+				if fi.Kind == model.FloorKindFood {
+					fillRect(dst, cellX+8, cellY+8, rpCellSz-17, rpCellSz-17, colorFoodFloor)
+				} else {
+					fillRect(dst, cellX+4, cellY+4, rpCellSz-9, rpCellSz-9, colorUtilFloor)
+				}
 			}
 			// cursor hover highlight
 			hx, hy := gridCellAtOrigin(mx, my, ox, oy, p.char)

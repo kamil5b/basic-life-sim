@@ -448,10 +448,10 @@ func dirName(d model.Direction) string {
 func consumeUse(char *model.Character, kind string, itemIdx, foodIdx int) {
 	switch kind {
 	case "floor":
-		f := &char.CurrentHome.FloorFood[foodIdx]
+		f := &char.CurrentHome.FloorItems[foodIdx]
 		f.UsesRemaining--
 		if f.UsesRemaining == 0 {
-			char.CurrentHome.FloorFood = append(char.CurrentHome.FloorFood[:foodIdx], char.CurrentHome.FloorFood[foodIdx+1:]...)
+			char.CurrentHome.FloorItems = append(char.CurrentHome.FloorItems[:foodIdx], char.CurrentHome.FloorItems[foodIdx+1:]...)
 		}
 	case "fridge":
 		s := &char.CurrentHome.RoomItems[itemIdx].Stored[foodIdx]
@@ -474,9 +474,9 @@ func consumeUse(char *model.Character, kind string, itemIdx, foodIdx int) {
 // stacking on top of any existing floor food at that cell.
 func nextFoodZ(char *model.Character, x, y uint8) uint8 {
 	maxTop := uint8(0)
-	for _, ff := range char.CurrentHome.FloorFood {
-		if ff.X == x && ff.Y == y {
-			top := ff.Z + ff.Food.Height
+	for _, fi := range char.CurrentHome.FloorItems {
+		if fi.X == x && fi.Y == y {
+			top := fi.Z + fi.Food.Height
 			if top > maxTop {
 				maxTop = top
 			}
@@ -488,7 +488,7 @@ func nextFoodZ(char *model.Character, x, y uint8) uint8 {
 func removeFoodEntirely(char *model.Character, kind string, itemIdx, foodIdx int) {
 	switch kind {
 	case "floor":
-		char.CurrentHome.FloorFood = append(char.CurrentHome.FloorFood[:foodIdx], char.CurrentHome.FloorFood[foodIdx+1:]...)
+		char.CurrentHome.FloorItems = append(char.CurrentHome.FloorItems[:foodIdx], char.CurrentHome.FloorItems[foodIdx+1:]...)
 	case "fridge":
 		ri := &char.CurrentHome.RoomItems[itemIdx]
 		ri.Stored = append(ri.Stored[:foodIdx], ri.Stored[foodIdx+1:]...)

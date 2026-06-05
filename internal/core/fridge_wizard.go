@@ -94,9 +94,9 @@ func (w *fridgeWizard) firstFreeTopCell() (x, y, topZ uint8, found bool) {
 	topZ = placed.Z + placed.Item.Height
 	cells := occupiedCells(placed.X, placed.Y, placed.Item, placed.Direction)
 	taken := make(map[[2]uint8]bool)
-	for _, ff := range w.char.CurrentHome.FloorFood {
-		if ff.Z >= topZ {
-			taken[[2]uint8{ff.X, ff.Y}] = true
+	for _, fi := range w.char.CurrentHome.FloorItems {
+		if fi.Z >= topZ {
+			taken[[2]uint8{fi.X, fi.Y}] = true
 		}
 	}
 	for _, c := range cells {
@@ -392,8 +392,9 @@ func (w *fridgeWizard) update() bool {
 						newFood.BaseExpiryDays = uint16(remaining)
 						placed.Stored = append(placed.Stored[:foodIdx], placed.Stored[foodIdx+1:]...)
 						fx, fy, fz, _ := w.firstFreeTopCell()
-						w.char.CurrentHome.FloorFood = append(w.char.CurrentHome.FloorFood, model.PlacedFood{
+						w.char.CurrentHome.FloorItems = append(w.char.CurrentHome.FloorItems, model.FloorItem{
 							X: fx, Y: fy, Z: fz,
+							Kind:          model.FloorKindFood,
 							PurchaseDate:  w.char.CurrentDate,
 							UsesRemaining: s.UsesRemaining,
 							Food:          newFood,

@@ -31,6 +31,7 @@ var (
 	colorDoor      = color.RGBA{160, 120, 60, 255}
 	colorItem      = color.RGBA{100, 160, 240, 255}
 	colorFoodFloor = color.RGBA{180, 140, 60, 255}
+	colorUtilFloor = color.RGBA{100, 200, 140, 255}
 )
 
 // ── drawing primitives ────────────────────────────────────────────────────────

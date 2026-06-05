@@ -173,10 +173,28 @@ type PlacedFood struct {
 	Food          Food
 }
 
+// FloorItemKind tags what a FloorItem holds.
+type FloorItemKind uint8
+
+const (
+	FloorKindFood FloorItemKind = iota
+	FloorKindUtility
+)
+
+// FloorItem is a food or utility placed directly on the floor grid.
+type FloorItem struct {
+	X, Y, Z       uint8
+	Kind          FloorItemKind
+	PurchaseDate  CompactDate // food only
+	UsesRemaining uint8       // food only
+	Food          Food        // set when Kind == FloorKindFood
+	Utility       Utility     // set when Kind == FloorKindUtility
+}
+
 type Home struct {
-	Type      HomeType
-	RoomItems []PlacedRoomItem
-	FloorFood []PlacedFood // food placed directly on the floor (no fridge)
+	Type       HomeType
+	RoomItems  []PlacedRoomItem
+	FloorItems []FloorItem // food & utilities on the floor
 }
 
 type ExperienceType uint8
