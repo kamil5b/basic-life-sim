@@ -1,6 +1,24 @@
-## UI
+## Gameplay Update
 
-### Remove Main Tabs
-- Home: Map of our room, and the items inside it. User can click on the item to see its details and the stacks (if its a stacks). If choosing fridge, it will show the food inside the fridge and its detail, and can be taken out.
-- User click door to go to Shop (it can be to uni / work in future).
-- Shop: List of items that can be bought, including food, utilities, placeable items. User can click on the item to see its details and buy it. User can also search for items by name or category.
+### Shared Kitchen
+- when user click door, there will be option Shared Kitchen (if shared kitchen is true)
+- There will be some event where kitchen can't be used randomly from 20 minutes to 6 hours (kitchen occupied / kitchen room broken)
+- Goes to another room named Shared Kitchen:
+[Wall][Wall][Wall][Wall][Wall][Wall]
+[Wall][Gas Stove][Gas Stove][Counter][Fridge][Wall]
+[Wall][Floor][Floor][Floor][Floor][Wall]
+[Wall][Wall][Wall][Wall][Door][Wall]
+- Fridge also shared, so the fridge will have items that even not the player's. Sometimes it can be full.
+- The fridge item will be changed randomly except your items
+- BUT your item can be randomly stolen
+- Door goes back to our room
+
+### Shared Bathroom
+- when user click door, there will be option Shared Bathroom (if shared bathroom is true)
+- There will be some event where bathroom can't be used randomly from 20 minutes to 6 hours (bathroom occupied / bathroom room broken)
+- Goes to another room named Shared Bathroom:
+[Wall][Wall][Wall][Wall][Wall][Wall]
+[Wall][Shower][Toilet][Floor][Mirror][Wall]
+[Wall][Shower][Floor][Floor][Floor][Door]
+[Wall][Wall][Wall][Wall][Wall][Wall]
+- Door goes back to our room
