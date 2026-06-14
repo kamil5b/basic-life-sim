@@ -15,6 +15,8 @@ type Game struct {
 	main       *mainScreen
 	updater    func(g *Game) error
 	shouldExit bool
+	winW       int
+	winH       int
 }
 
 func newGame() *Game {
@@ -28,6 +30,9 @@ func (g *Game) SetScreen(s Screen) {
 	g.main = nil
 	g.updater = nil
 	g.rootView = s.BuildView(g)
+	if g.rootView != nil && g.winW > 0 {
+		g.rootView.UpdateWithSize(g.winW, g.winH)
+	}
 }
 
 func (g *Game) Update() error {
@@ -55,7 +60,7 @@ func (g *Game) Update() error {
 	}
 
 	if g.rootView != nil {
-		g.rootView.Update()
+		g.rootView.UpdateWithSize(g.winW, g.winH)
 	}
 
 	if g.updater != nil {
@@ -83,6 +88,8 @@ func (g *Game) Layout(ow, oh int) (int, int) {
 	if oh < 600 {
 		oh = 600
 	}
+	g.winW = ow
+	g.winH = oh
 	return ow, oh
 }
 
@@ -93,6 +100,7 @@ func Run() error {
 	}
 	ebiten.SetWindowTitle("Basic Life Simulator")
 	ebiten.SetWindowSize(1100, 700)
+	ebiten.SetWindowPosition(200, 100)
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
 	return ebiten.RunGame(newGame())
 }

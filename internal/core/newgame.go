@@ -57,6 +57,11 @@ func (s *newGameScreen) update(g *Game) error {
 	return nil
 }
 
+func (s *newGameScreen) rebuild(g *Game) {
+	g.rootView = s.build(g)
+	g.rootView.UpdateWithSize(g.winW, g.winH)
+}
+
 func (s *newGameScreen) build(g *Game) *furex.View {
 	root := &furex.View{
 		Direction:  furex.Column,
@@ -112,6 +117,7 @@ func (s *newGameScreen) buildNameStep(root *furex.View, g *Game) {
 			label: "Continue →",
 			font:  fontM,
 			action: func() {
+				defer s.rebuild(g)
 				if s.name == "" {
 					s.errMsg = "Please enter a name."
 				} else {
@@ -141,6 +147,7 @@ func (s *newGameScreen) buildGenderStep(root *furex.View, g *Game) {
 			label: "♂  Male",
 			font:  fontM,
 			action: func() {
+				defer s.rebuild(g)
 				s.isMale = true
 				s.errMsg = ""
 				s.step = ngStepHome
@@ -154,6 +161,7 @@ func (s *newGameScreen) buildGenderStep(root *furex.View, g *Game) {
 			label: "♀  Female",
 			font:  fontM,
 			action: func() {
+				defer s.rebuild(g)
 				s.isMale = false
 				s.errMsg = ""
 				s.step = ngStepHome

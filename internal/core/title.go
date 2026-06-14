@@ -23,6 +23,11 @@ func (s *titleScreen) BuildView(g *Game) *furex.View {
 	return s.build(g)
 }
 
+func (s *titleScreen) rebuild(g *Game) {
+	g.rootView = s.build(g)
+	g.rootView.UpdateWithSize(g.winW, g.winH)
+}
+
 func (s *titleScreen) build(g *Game) *furex.View {
 	root := &furex.View{
 		Direction:  furex.Column,
@@ -56,7 +61,9 @@ func (s *titleScreen) build(g *Game) *furex.View {
 						switch l {
 						case "New Game":
 							g.SetScreen(newNewGameScreen())
+							return
 						case "Load Game":
+							defer s.rebuild(g)
 							s.loadMode = true
 							s.selIdx = -1
 							s.loadMsg = ""
@@ -120,6 +127,7 @@ func (s *titleScreen) buildLoadMode(root *furex.View, g *Game) {
 			label: "← Back",
 			font:  fontM,
 			action: func() {
+				defer s.rebuild(g)
 				s.loadMode = false
 			},
 		},
@@ -206,6 +214,7 @@ func (ls *loadSlot) Draw(screen *ebiten.Image, frame image.Rectangle, v *furex.V
 }
 
 func (ls *loadSlot) HandleJustPressedMouseButtonLeft(px, py int) bool {
+	defer ls.s.rebuild(ls.g)
 	ls.s.selIdx = ls.idx
 	x := float32(ls.frame.Min.X)
 	y := float32(ls.frame.Min.Y)
