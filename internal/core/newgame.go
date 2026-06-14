@@ -58,7 +58,11 @@ func (s *newGameScreen) update(g *Game) error {
 }
 
 func (s *newGameScreen) rebuild(g *Game) {
-	g.rootView = s.build(g)
+	v := s.build(g)
+	v.Width = g.winW
+	v.Height = g.winH
+	v.Layout()
+	g.rootView = v
 }
 
 func (s *newGameScreen) build(g *Game) *furex.View {

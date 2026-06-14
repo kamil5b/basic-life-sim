@@ -29,7 +29,13 @@ func (g *Game) SetScreen(s Screen) {
 	g.current = s
 	g.main = nil
 	g.updater = nil
-	g.rootView = s.BuildView(g)
+	v := s.BuildView(g)
+	if v != nil {
+		v.Width = g.winW
+		v.Height = g.winH
+		v.Layout()
+	}
+	g.rootView = v
 }
 
 func (g *Game) Update() error {

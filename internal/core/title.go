@@ -24,7 +24,11 @@ func (s *titleScreen) BuildView(g *Game) *furex.View {
 }
 
 func (s *titleScreen) rebuild(g *Game) {
-	g.rootView = s.build(g)
+	v := s.build(g)
+	v.Width = g.winW
+	v.Height = g.winH
+	v.Layout()
+	g.rootView = v
 }
 
 func (s *titleScreen) build(g *Game) *furex.View {
