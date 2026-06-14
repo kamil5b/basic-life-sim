@@ -45,6 +45,8 @@ type placementWizard struct {
 	gridOriginY float32
 	panelOX     float32 // left panel X origin
 	panelOY     float32 // left panel Y origin
+	panelW      float32 // left panel width
+	panelH      float32 // left panel height
 	cancelLabel string
 	onFinalize  func(x, y, z uint8, dir model.Direction) error
 	onCancel    func()
@@ -63,7 +65,7 @@ func newPlacementWizard(
 	item *model.RoomItem,
 	excludeIdx int,
 	gridOriginX, gridOriginY float32,
-	panelOX, panelOY float32,
+	panelOX, panelOY, panelW, panelH float32,
 	cancelLabel string,
 	onFinalize func(x, y, z uint8, dir model.Direction) error,
 	onCancel func(),
@@ -76,6 +78,8 @@ func newPlacementWizard(
 		gridOriginY: gridOriginY,
 		panelOX:     panelOX,
 		panelOY:     panelOY,
+		panelW:      panelW,
+		panelH:      panelH,
 		cancelLabel: cancelLabel,
 		onFinalize:  onFinalize,
 		onCancel:    onCancel,
@@ -209,7 +213,7 @@ func (w *placementWizard) update() bool {
 	clicked := inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft)
 
 	// cancel button always available
-	cx2, cy2, cw, ch := spCancelBtnRect()
+	cx2, cy2, cw, ch := w.panelOX+float32(340)-100, w.panelOY+4, float32(96), float32(28)
 	if clicked && isHovered(mx, my, cx2, cy2, cw, ch) {
 		switch w.curStep {
 		case pwStepGrid:
@@ -258,7 +262,8 @@ func (w *placementWizard) update() bool {
 				}
 			}
 			for z := 0; z < mh; z++ {
-				cx2, cy2, cw, ch := spZCellRect(z, mh)
+				row := mh - 1 - z
+				cx2, cy2, cw, ch := w.panelOX+60, w.panelOY+60+float32(row)*zCellH, zCellW, zCellH-2
 				if isHovered(mx, my, cx2, cy2, cw, ch) {
 					candidate := uint8(z)
 					validAnchor := w.item.CanOverhang || candidate == 0 || supportedZ[candidate]
@@ -268,7 +273,7 @@ func (w *placementWizard) update() bool {
 					break
 				}
 			}
-			zbx, zby, zbw, zbh := spZConfirmBtnRect()
+			zbx, zby, zbw, zbh := w.panelOX+60, w.panelOY+w.panelH-80, float32(180), float32(38)
 			if isHovered(mx, my, zbx, zby, zbw, zbh) {
 				w.err = ""
 				if w.z > 0 {
@@ -288,7 +293,11 @@ func (w *placementWizard) update() bool {
 	case pwStepDir:
 		dirs := []model.Direction{model.North, model.East, model.South, model.West}
 		for i, d := range dirs {
-			bx, by, bw, bh := spDirBtnRect(i)
+			bw, bh := float32(88), float32(44)
+			col := float32(i % 2)
+			row := float32(i / 2)
+			bx := w.panelOX + 20 + col*(bw+8)
+			by := w.panelOY + 120 + row*(bh+10)
 			if isHovered(mx, my, bx, by, bw, bh) {
 				w.dir = d
 				w.err = ""
@@ -324,7 +333,7 @@ func (w *placementWizard) drawLeftPanel(dst *ebiten.Image, mx, my int) {
 		drawText(dst, w.item.Name, lx, float64(w.panelOY)+40, fontM, colorAccent)
 		drawText(dst, fmt.Sprintf("pos (%d,%d)", w.x, w.y), lx, float64(w.panelOY)+66, fontS, colorMuted)
 
-		labelX := float64(zColX) + float64(zCellW) + 8
+		labelX := float64(w.panelOX+60) + float64(zCellW) + 8
 		// Precompute which Z levels have a supporting item directly below.
 		supportedZ := make(map[int]bool)
 		for _, placed := range w.char.CurrentHome.RoomItems {
@@ -339,7 +348,8 @@ func (w *placementWizard) drawLeftPanel(dst *ebiten.Image, mx, my int) {
 			}
 		}
 		for z := mh - 1; z >= 0; z-- {
-			cx2, cy2, cw, ch := spZCellRect(z, mh)
+			row := mh - 1 - z
+			cx2, cy2, cw, ch := w.panelOX+60, w.panelOY+60+float32(row)*zCellH, zCellW, zCellH-2
 			occ := z >= selZ && z < selZ+itemH
 			validAnchor := canOverhang || z == 0 || supportedZ[z]
 			clickable := validAnchor && uint8(z) <= uint8(maxZ)
@@ -374,8 +384,8 @@ func (w *placementWizard) drawLeftPanel(dst *ebiten.Image, mx, my int) {
 			zw, _ := text.Measure(zv, fontS, 0)
 			drawText(dst, zv, float64(cx2)+float64(cw)/2-zw/2, float64(cy2)+float64(ch)/2-7, fontS, tc)
 
-			row := mh - 1 - z
-			annY := float64(zColY) + float64(row)*float64(zCellH)
+			row = mh - 1 - z
+			annY := float64(w.panelOY+60) + float64(row)*float64(zCellH)
 			var ann string
 			switch {
 			case occ && z == selZ:
@@ -394,12 +404,12 @@ func (w *placementWizard) drawLeftPanel(dst *ebiten.Image, mx, my int) {
 			drawText(dst, ann, labelX, annY+float64(zCellH)/2-7, fontS, annColor)
 		}
 
-		legendY := float64(zColY) + float64(mh)*float64(zCellH) + 6
-		drawText(dst, fmt.Sprintf("Item height: %d  MaxH: %d", itemH, mh), float64(zColX), legendY, fontS, colorMuted)
+		legendY := float64(w.panelOY+60) + float64(mh)*float64(zCellH) + 6
+		drawText(dst, fmt.Sprintf("Item height: %d  MaxH: %d", itemH, mh), float64(w.panelOX+60), legendY, fontS, colorMuted)
 		if canOverhang {
-			drawText(dst, "Can overhang: yes", float64(zColX), legendY+16, fontS, colorGreen)
+			drawText(dst, "Can overhang: yes", float64(w.panelOX+60), legendY+16, fontS, colorGreen)
 		}
-		cbx, cby, cbw, cbh := spZConfirmBtnRect()
+		cbx, cby, cbw, cbh := w.panelOX+60, w.panelOY+w.panelH-80, float32(180), float32(38)
 		drawButton(dst, "Confirm Z →", cbx, cby, cbw, cbh, fontM, isHovered(mx, my, cbx, cby, cbw, cbh), true)
 
 	case pwStepDir:
@@ -409,7 +419,11 @@ func (w *placementWizard) drawLeftPanel(dst *ebiten.Image, mx, my int) {
 
 		dirs := []model.Direction{model.North, model.East, model.South, model.West}
 		for i, d := range dirs {
-			bx, by, bw, bh := spDirBtnRect(i)
+			bw, bh := float32(88), float32(44)
+			col := float32(i % 2)
+			row := float32(i / 2)
+			bx := w.panelOX + 20 + col*(bw+8)
+			by := w.panelOY + 120 + row*(bh+10)
 			blocked := w.dirFacesWall(d)
 			hov := isHovered(mx, my, bx, by, bw, bh) && !blocked
 			drawButton(dst, dirBtnLabels[i], bx, by, bw, bh, fontM, hov, !blocked)
@@ -420,7 +434,7 @@ func (w *placementWizard) drawLeftPanel(dst *ebiten.Image, mx, my int) {
 		if w.err != "" {
 			drawTextWrapped(dst, w.err,
 				float64(w.panelOX)+20, float64(w.panelOY)+240,
-				float64(spListW)-24, 18, fontS, colorRed)
+				float64(float32(340))-24, 18, fontS, colorRed)
 		}
 	}
 }
