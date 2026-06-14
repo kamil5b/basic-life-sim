@@ -338,18 +338,24 @@ func (p *roomPanel) update() {
 		fi := &p.char.CurrentHome.FloorItems[p.selFloorItem]
 		isFood := fi.Item.Kind == model.FloorKindFood
 
-		// Back
-		bx, by, bw, bh := p.main.panelX()+4, p.main.panelY()+4+rpRowH*20-50, float32(100), float32(32)
-		if clicked && isHovered(mx, my, bx, by, bw, bh) {
-			p.floorMoveMode = false
-			p.mode = rpModeFiltered
-			return
-		}
+		rowY := p.main.panelY() + 4 + 48
+		rowH := float32(36)
+		rowGap := float32(6)
+		rowW := float32(260)
 
 		if isFood {
-			// Eat
-			eax, eay, eaw, eah := p.main.panelX()+4+108, p.main.panelY()+4+rpRowH*20-50, float32(80), float32(32)
-			if clicked && isHovered(mx, my, eax, eay, eaw, eah) && !p.floorMoveMode {
+			rowY += rowH + rowGap + 8
+		}
+		if isFood && isInedible(fi.Item.Food) {
+			rowY += rowH + rowGap + 8
+		}
+		if p.floorMoveMode {
+			rowY += rowH + rowGap + 8
+		}
+
+		// Eat / Use button
+		if clicked && isHovered(mx, my, p.main.panelX()+4, rowY, rowW, rowH) && !p.floorMoveMode {
+			if isFood {
 				char := p.char
 				if model.IsExpired(fi.Item.PurchaseDate, fi.Item.Food.BaseExpiryDays, 1, char.CurrentDate) {
 					foodExpiredPenalty(char)
@@ -365,11 +371,7 @@ func (p *roomPanel) update() {
 				p.selFloorItem = -1
 				p.mode = rpModeFiltered
 				return
-			}
-		} else {
-			// Use — check for food at same cell to process
-			ex, ey, ew, eh := p.main.panelX()+4+108, p.main.panelY()+4+rpRowH*20-50, float32(80), float32(32)
-			if clicked && isHovered(mx, my, ex, ey, ew, eh) && !p.floorMoveMode {
+			} else {
 				processed := false
 				for oi, o := range p.char.CurrentHome.FloorItems {
 					if o.Item.Kind == model.FloorKindFood && o.X == fi.X && o.Y == fi.Y {
@@ -384,20 +386,20 @@ func (p *roomPanel) update() {
 				}
 			}
 		}
+		rowY += rowH + rowGap
 
-		// Move: toggle waiting-for-click mode
-		mmx, mmy, mmw, mmh := p.main.panelX()+4+196, p.main.panelY()+4+rpRowH*20-50, float32(90), float32(32)
-		if clicked && isHovered(mx, my, mmx, mmy, mmw, mmh) {
+		// Move / Cancel button
+		if clicked && isHovered(mx, my, p.main.panelX()+4, rowY, rowW, rowH) {
 			p.floorMoveMode = !p.floorMoveMode
 			if p.floorMoveMode {
 				p.main.setMessage("Click a floor cell to move the item there.")
 			}
 			return
 		}
+		rowY += rowH + rowGap
 
-		// Trash
-		tx, ty, tw, th := p.main.panelX()+4+294, p.main.panelY()+4+rpRowH*20-50, float32(80), float32(32)
-		if clicked && isHovered(mx, my, tx, ty, tw, th) && !p.floorMoveMode {
+		// Trash button
+		if clicked && isHovered(mx, my, p.main.panelX()+4, rowY, rowW, rowH) && !p.floorMoveMode {
 			name := fi.Item.Food.Name
 			if !isFood {
 				name = fi.Item.Utility.Name
@@ -407,6 +409,14 @@ func (p *roomPanel) update() {
 				p.char.CurrentHome.FloorItems[p.selFloorItem+1:]...)
 			p.main.setMessage(fmt.Sprintf("Trashed %s.", name))
 			p.selFloorItem = -1
+			p.mode = rpModeFiltered
+			return
+		}
+		rowY += rowH + rowGap
+
+		// Back button
+		if clicked && isHovered(mx, my, p.main.panelX()+4, rowY, rowW, rowH) {
+			p.floorMoveMode = false
 			p.mode = rpModeFiltered
 			return
 		}
@@ -1047,6 +1057,12 @@ func (p *roomPanel) draw(dst *ebiten.Image) {
 		drawText(dst, name, float64(p.main.panelX()+4), float64(p.main.panelY()+4), fontM, headCol)
 		drawText(dst, fmt.Sprintf("at (%d,%d,z=%d)", fi.X, fi.Y, fi.Z),
 			float64(p.main.panelX()+4), float64(p.main.panelY()+4)+18, fontS, colorMuted)
+
+		rowY := p.main.panelY() + 4 + 48
+		rowH := float32(36)
+		rowGap := float32(6)
+		rowW := float32(260)
+
 		if isFood {
 			exp := model.IsExpired(fi.Item.PurchaseDate, fi.Item.Food.BaseExpiryDays, 1, char.CurrentDate)
 			expiry := model.ExpiryDate(fi.Item.PurchaseDate, fi.Item.Food.BaseExpiryDays, 1)
@@ -1055,31 +1071,37 @@ func (p *roomPanel) draw(dst *ebiten.Image) {
 			if exp {
 				expTag = fmt.Sprintf("EXPIRED %04d-%02d-%02d", ey, em, ed)
 			}
-			drawText(dst, expTag, float64(p.main.panelX()+4), float64(p.main.panelY()+4)+40, fontS, headCol)
-			if isInedible(fi.Item.Food) {
-				drawText(dst, "[raw / inedible — eating will penalise stats]", float64(p.main.panelX()+4), float64(p.main.panelY()+4)+58, fontS, colorYellow)
-			}
+			drawText(dst, expTag, float64(p.main.panelX()+4), float64(rowY)+10, fontS, headCol)
+			rowY += rowH + rowGap + 8
+		}
+		if isFood && isInedible(fi.Item.Food) {
+			drawText(dst, "[raw / inedible]", float64(p.main.panelX()+4), float64(rowY)+10, fontS, colorYellow)
+			rowY += rowH + rowGap + 8
 		}
 		if p.floorMoveMode {
-			drawText(dst, "→ Click a floor cell to move item there", float64(p.main.panelX()+4), float64(p.main.panelY()+4)+78, fontS, colorYellow)
+			drawText(dst, "→ Click a floor cell to move item there", float64(p.main.panelX()+4), float64(rowY)+10, fontS, colorYellow)
+			rowY += rowH + rowGap + 8
 		}
 
-		bx, by, bw, bh := p.main.panelX()+4, p.main.panelY()+4+rpRowH*20-50, float32(100), float32(32)
-		drawButton(dst, "← Back", bx, by, bw, bh, fontS, isHovered(mx, my, bx, by, bw, bh), true)
-		ex, ey, ew, eh := p.main.panelX()+4+108, p.main.panelY()+4+rpRowH*20-50, float32(80), float32(32)
+		// Action buttons — vertical rows
 		actionLabel := "Eat"
 		if !isFood {
 			actionLabel = "Use"
 		}
-		drawButton(dst, actionLabel, ex, ey, ew, eh, fontS, isHovered(mx, my, ex, ey, ew, eh) && !p.floorMoveMode, !p.floorMoveMode)
-		mmx, mmy, mmw, mmh := p.main.panelX()+4+196, p.main.panelY()+4+rpRowH*20-50, float32(90), float32(32)
+		drawButton(dst, actionLabel, p.main.panelX()+4, rowY, rowW, rowH, fontS, isHovered(mx, my, p.main.panelX()+4, rowY, rowW, rowH) && !p.floorMoveMode, !p.floorMoveMode)
+		rowY += rowH + rowGap
+
 		moveLabel := "✦ Move"
 		if p.floorMoveMode {
 			moveLabel = "✦ Cancel"
 		}
-		drawButton(dst, moveLabel, mmx, mmy, mmw, mmh, fontS, isHovered(mx, my, mmx, mmy, mmw, mmh), true)
-		tx, ty, tw, th := p.main.panelX()+4+294, p.main.panelY()+4+rpRowH*20-50, float32(80), float32(32)
-		drawButton(dst, "Trash", tx, ty, tw, th, fontS, isHovered(mx, my, tx, ty, tw, th) && !p.floorMoveMode, !p.floorMoveMode)
+		drawButton(dst, moveLabel, p.main.panelX()+4, rowY, rowW, rowH, fontS, isHovered(mx, my, p.main.panelX()+4, rowY, rowW, rowH), true)
+		rowY += rowH + rowGap
+
+		drawButton(dst, "Trash", p.main.panelX()+4, rowY, rowW, rowH, fontS, isHovered(mx, my, p.main.panelX()+4, rowY, rowW, rowH) && !p.floorMoveMode, !p.floorMoveMode)
+		rowY += rowH + rowGap
+
+		drawButton(dst, "← Back", p.main.panelX()+4, rowY, rowW, rowH, fontS, isHovered(mx, my, p.main.panelX()+4, rowY, rowW, rowH), true)
 
 	case rpModeFloorFoodFridgeChoice:
 		if p.selFloorItem < 0 || p.floorFoodFridgeTarget < 0 ||
@@ -1284,8 +1306,8 @@ func (p *roomPanel) drawRoomGrid(dst *ebiten.Image) {
 		}
 	}
 
-	// Hover cursor outline in list/moveGrid mode
-	if p.mode == rpModeList || p.mode == rpModeMoveGrid {
+	// Hover cursor outline in list/moveGrid/floorMove mode
+	if p.mode == rpModeList || p.mode == rpModeMoveGrid || p.floorMoveMode {
 		mx, my := ebiten.CursorPosition()
 		hx, hy := p.gridCellAt(mx, my)
 		if hx >= 0 {
