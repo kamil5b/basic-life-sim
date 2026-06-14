@@ -265,22 +265,23 @@ func (p *roomPanel) update() {
 			return
 		}
 		placed := &p.char.CurrentHome.RoomItems[p.selItem]
-		actions := placed.Item.Actions
 
-		// back button
-		bx, by, bw, bh := p.main.panelX()+4, p.main.panelY()+4+rpRowH*20-50, float32(100), float32(32)
-		if clicked && isHovered(mx, my, bx, by, bw, bh) {
-			p.mode = rpModeFiltered
-			return
+		rowY := p.main.panelY() + 4 + 48
+		rowH := float32(36)
+		rowGap := float32(6)
+		rowW := float32(260)
+
+		if placed.Item.Storage != nil || placed.Item.CookSurface != nil {
+			rowY += rowH + rowGap + 8
 		}
 
-		// move button
-		mbx, mby, mbw, mbh := p.main.panelX()+4+108, p.main.panelY()+4+rpRowH*20-50, float32(120), float32(32)
-		if clicked && isHovered(mx, my, mbx, mby, mbw, mbh) {
+		// Move button
+		if clicked && isHovered(mx, my, p.main.panelX()+4, rowY, rowW, rowH) {
 			p.wizard = newPlacementWizard(
 				p.char, &placed.Item, p.selItem,
 				p.main.panelX()+274, p.main.panelY()+4+20,
-				p.main.panelX()+4, p.main.panelY()+4, p.main.panelW(), p.main.panelH(),
+				p.main.panelX()+4, p.main.panelY()+4,
+				p.main.panelW(), p.main.panelH(),
 				"← Cancel",
 				func(x, y, z uint8, dir model.Direction) error {
 					return p.finalizeMove(x, y, z, dir)
@@ -290,23 +291,25 @@ func (p *roomPanel) update() {
 			p.mode = rpModeMoveGrid
 			return
 		}
+		rowY += rowH + rowGap
 
-		// sell button
-		sbx, sby, sbw, sbh := p.main.panelX()+4+236, p.main.panelY()+4+rpRowH*20-50, float32(80), float32(32)
-		if clicked && isHovered(mx, my, sbx, sby, sbw, sbh) {
+		// Sell button
+		if clicked && isHovered(mx, my, p.main.panelX()+4, rowY, rowW, rowH) {
 			p.executeSell(placed)
 			return
 		}
-		// trash button
-		tbx, tby, tbw, tbh := p.main.panelX()+4+324, p.main.panelY()+4+rpRowH*20-50, float32(80), float32(32)
-		if clicked && isHovered(mx, my, tbx, tby, tbw, tbh) {
+		rowY += rowH + rowGap
+
+		// Trash button
+		if clicked && isHovered(mx, my, p.main.panelX()+4, rowY, rowW, rowH) {
 			p.executeTrash(placed)
 			return
 		}
-		// organize fridge button (only for storage items)
+		rowY += rowH + rowGap
+
+		// Organize (storage only)
 		if placed.Item.Storage != nil {
-			obx, oby, obw, obh := p.main.panelX()+4+412, p.main.panelY()+4+rpRowH*20-50, float32(100), float32(32)
-			if clicked && isHovered(mx, my, obx, oby, obw, obh) {
+			if clicked && isHovered(mx, my, p.main.panelX()+4, rowY, rowW, rowH) {
 				p.storageWiz = newStorageWizard(
 					p.char, p.selItem,
 					p.main.panelX()+274, p.main.panelY()+4+20, p.main.panelX()+4,
@@ -318,18 +321,13 @@ func (p *roomPanel) update() {
 				)
 				return
 			}
+			rowY += rowH + rowGap
 		}
 
-		for i, act := range actions {
-			ax, ay, aw, ah := p.main.panelX()+4, p.main.panelY()+4+float32(i)*42, float32(260), float32(36)
-			if clicked && isHovered(mx, my, ax, ay, aw, ah) {
-				p.selAct = i
-				if canSkipTime(act) {
-					p.mode = rpModeTimeSkip
-					return
-				}
-				p.executeAction(placed, act)
-			}
+		// Back button
+		if clicked && isHovered(mx, my, p.main.panelX()+4, rowY, rowW, rowH) {
+			p.mode = rpModeFiltered
+			return
 		}
 
 	case rpModeFloorItemAction:
@@ -980,66 +978,36 @@ func (p *roomPanel) draw(dst *ebiten.Image) {
 		drawText(dst, fmt.Sprintf("at (%d,%d,z=%d) facing %s", placed.X, placed.Y, placed.Z, dirName(placed.Direction)),
 			float64(p.main.panelX()+4), float64(p.main.panelY()+4)+20, fontS, colorMuted)
 
+		rowY := p.main.panelY() + 4 + 48
+		rowH := float32(36)
+		rowGap := float32(6)
+		rowW := float32(260)
+
 		if placed.Item.Storage != nil {
 			used := usedSlotCount(&char.CurrentHome.RoomItems[p.selItem])
 			total := placed.Item.Storage.TotalSlots()
 			drawText(dst, fmt.Sprintf("Storage: %d/%d slots", used, total),
-				float64(p.main.panelX()+4), float64(p.main.panelY()+4)+40, fontS, colorText)
-			iy := float64(p.main.panelY()+4) + 60
-			for _, s := range placed.Stored {
-				exp := model.IsExpired(s.Item.PurchaseDate, s.Item.Food.BaseExpiryDays, s.Item.MultiplierUsed, char.CurrentDate)
-				col := colorText
-				tag := ""
-				if exp {
-					col = colorRed
-					tag = " [EXPIRED]"
-				}
-				expiry := model.ExpiryDate(s.Item.PurchaseDate, s.Item.Food.BaseExpiryDays, s.Item.MultiplierUsed)
-				ey, em, ed := expiry.Unpack()
-				drawText(dst, fmt.Sprintf("  %s  uses:%d  exp:%04d-%02d-%02d%s",
-					s.Item.Food.Name, s.Item.UsesRemaining, ey, em, ed, tag),
-					float64(p.main.panelX()+4), iy, fontS, col)
-				iy += 18
-			}
+				float64(p.main.panelX()+4), float64(rowY)+10, fontS, colorText)
+			rowY += rowH + rowGap + 8
 		}
-
 		if placed.Item.CookSurface != nil {
-			drawText(dst, fmt.Sprintf("Surface: %d/%d slots", len(placed.OnSurface), placed.Item.CookSurface.Slots),
-				float64(p.main.panelX()+4), float64(p.main.panelY()+4)+40, fontS, colorText)
-			iy := float64(p.main.panelY()+4) + 60
-			for _, sf := range placed.OnSurface {
-				tag := ""
-				if sf.Cooked {
-					tag = " [cooked]"
-				}
-				drawText(dst, fmt.Sprintf("  %s%s uses:%d", sf.Food.Name, tag, sf.UsesRemaining),
-					float64(p.main.panelX()+4), iy, fontS, colorText)
-				iy += 18
-			}
+			drawText(dst, fmt.Sprintf("Cook: %d/%d slots", len(placed.OnSurface), placed.Item.CookSurface.Slots),
+				float64(p.main.panelX()+4), float64(rowY)+10, fontS, colorText)
+			rowY += rowH + rowGap + 8
 		}
 
-		actY := float64(p.main.panelY()+4) + 176
-		drawText(dst, "Actions:", float64(p.main.panelX()+4), actY, fontS, colorMuted)
-		actY += 20
-		for i, act := range placed.Item.Actions {
-			ax, ay, aw, ah := p.main.panelX()+4, p.main.panelY()+4+float32(i)*42, float32(260), float32(36)
-			ay = float32(actY) + float32(i)*42
-			hov := isHovered(mx, my, ax, ay, aw, ah)
-			drawButton(dst, act, ax, ay, aw, ah, fontM, hov, true)
-		}
-
-		bx, by, bw, bh := p.main.panelX()+4, p.main.panelY()+4+rpRowH*20-50, float32(100), float32(32)
-		drawButton(dst, "← Back", bx, by, bw, bh, fontS, isHovered(mx, my, bx, by, bw, bh), true)
-		mbx, mby, mbw, mbh := p.main.panelX()+4+108, p.main.panelY()+4+rpRowH*20-50, float32(120), float32(32)
-		drawButton(dst, "✦ Move", mbx, mby, mbw, mbh, fontS, isHovered(mx, my, mbx, mby, mbw, mbh), true)
-		sbx, sby, sbw, sbh := p.main.panelX()+4+236, p.main.panelY()+4+rpRowH*20-50, float32(80), float32(32)
-		drawButton(dst, "Sell", sbx, sby, sbw, sbh, fontS, isHovered(mx, my, sbx, sby, sbw, sbh), true)
-		tbx, tby, tbw, tbh := p.main.panelX()+4+324, p.main.panelY()+4+rpRowH*20-50, float32(80), float32(32)
-		drawButton(dst, "Trash", tbx, tby, tbw, tbh, fontS, isHovered(mx, my, tbx, tby, tbw, tbh), true)
+		// Action buttons — vertical rows
+		drawButton(dst, "✦ Move", p.main.panelX()+4, rowY, rowW, rowH, fontS, isHovered(mx, my, p.main.panelX()+4, rowY, rowW, rowH), true)
+		rowY += rowH + rowGap
+		drawButton(dst, "Sell (50% refund)", p.main.panelX()+4, rowY, rowW, rowH, fontS, isHovered(mx, my, p.main.panelX()+4, rowY, rowW, rowH), true)
+		rowY += rowH + rowGap
+		drawButton(dst, "Trash", p.main.panelX()+4, rowY, rowW, rowH, fontS, isHovered(mx, my, p.main.panelX()+4, rowY, rowW, rowH), true)
+		rowY += rowH + rowGap
 		if placed.Item.Storage != nil {
-			obx, oby, obw, obh := p.main.panelX()+4+412, p.main.panelY()+4+rpRowH*20-50, float32(100), float32(32)
-			drawButton(dst, "📦 Organize", obx, oby, obw, obh, fontS, isHovered(mx, my, obx, oby, obw, obh), true)
+			drawButton(dst, "📦 Organize", p.main.panelX()+4, rowY, rowW, rowH, fontS, isHovered(mx, my, p.main.panelX()+4, rowY, rowW, rowH), true)
+			rowY += rowH + rowGap
 		}
+		drawButton(dst, "← Back", p.main.panelX()+4, rowY, rowW, rowH, fontS, isHovered(mx, my, p.main.panelX()+4, rowY, rowW, rowH), true)
 
 	case rpModeUtilityChoice:
 		if p.selFloorItem < 0 || p.utilTarget < 0 ||

@@ -25,7 +25,6 @@ func (s *titleScreen) BuildView(g *Game) *furex.View {
 
 func (s *titleScreen) rebuild(g *Game) {
 	g.rootView = s.build(g)
-	g.rootView.UpdateWithSize(g.winW, g.winH)
 }
 
 func (s *titleScreen) build(g *Game) *furex.View {

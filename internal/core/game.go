@@ -30,9 +30,6 @@ func (g *Game) SetScreen(s Screen) {
 	g.main = nil
 	g.updater = nil
 	g.rootView = s.BuildView(g)
-	if g.rootView != nil && g.winW > 0 {
-		g.rootView.UpdateWithSize(g.winW, g.winH)
-	}
 }
 
 func (g *Game) Update() error {
