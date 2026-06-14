@@ -43,6 +43,8 @@ type placementWizard struct {
 	excludeIdx  int             // index of item to exclude from collision (-1 = none)
 	gridOriginX float32
 	gridOriginY float32
+	panelOX     float32 // left panel X origin
+	panelOY     float32 // left panel Y origin
 	cancelLabel string
 	onFinalize  func(x, y, z uint8, dir model.Direction) error
 	onCancel    func()
@@ -61,6 +63,7 @@ func newPlacementWizard(
 	item *model.RoomItem,
 	excludeIdx int,
 	gridOriginX, gridOriginY float32,
+	panelOX, panelOY float32,
 	cancelLabel string,
 	onFinalize func(x, y, z uint8, dir model.Direction) error,
 	onCancel func(),
@@ -71,6 +74,8 @@ func newPlacementWizard(
 		excludeIdx:  excludeIdx,
 		gridOriginX: gridOriginX,
 		gridOriginY: gridOriginY,
+		panelOX:     panelOX,
+		panelOY:     panelOY,
 		cancelLabel: cancelLabel,
 		onFinalize:  onFinalize,
 		onCancel:    onCancel,
@@ -305,7 +310,7 @@ func (w *placementWizard) update() bool {
 
 // DrawLeftPanel draws step instructions + Z picker or direction picker inside the left panel.
 func (w *placementWizard) drawLeftPanel(dst *ebiten.Image, mx, my int) {
-	lx := float64(panelX) + 20
+	lx := float64(w.panelOX) + 20
 
 	switch w.curStep {
 	case pwStepZ:
@@ -315,9 +320,9 @@ func (w *placementWizard) drawLeftPanel(dst *ebiten.Image, mx, my int) {
 		canOverhang := w.item.CanOverhang
 		selZ := int(w.z)
 
-		drawText(dst, "Step 2: Pick height (Z)", lx, float64(panelY)+16, fontS, colorMuted)
-		drawText(dst, w.item.Name, lx, float64(panelY)+40, fontM, colorAccent)
-		drawText(dst, fmt.Sprintf("pos (%d,%d)", w.x, w.y), lx, float64(panelY)+66, fontS, colorMuted)
+		drawText(dst, "Step 2: Pick height (Z)", lx, float64(w.panelOY)+16, fontS, colorMuted)
+		drawText(dst, w.item.Name, lx, float64(w.panelOY)+40, fontM, colorAccent)
+		drawText(dst, fmt.Sprintf("pos (%d,%d)", w.x, w.y), lx, float64(w.panelOY)+66, fontS, colorMuted)
 
 		labelX := float64(zColX) + float64(zCellW) + 8
 		// Precompute which Z levels have a supporting item directly below.
@@ -398,9 +403,9 @@ func (w *placementWizard) drawLeftPanel(dst *ebiten.Image, mx, my int) {
 		drawButton(dst, "Confirm Z →", cbx, cby, cbw, cbh, fontM, isHovered(mx, my, cbx, cby, cbw, cbh), true)
 
 	case pwStepDir:
-		drawText(dst, "Step 3: Choose facing direction", lx, float64(panelY)+16, fontS, colorMuted)
-		drawText(dst, w.item.Name, lx, float64(panelY)+40, fontM, colorAccent)
-		drawText(dst, fmt.Sprintf("pos (%d,%d)  z=%d", w.x, w.y, w.z), lx, float64(panelY)+66, fontS, colorMuted)
+		drawText(dst, "Step 3: Choose facing direction", lx, float64(w.panelOY)+16, fontS, colorMuted)
+		drawText(dst, w.item.Name, lx, float64(w.panelOY)+40, fontM, colorAccent)
+		drawText(dst, fmt.Sprintf("pos (%d,%d)  z=%d", w.x, w.y, w.z), lx, float64(w.panelOY)+66, fontS, colorMuted)
 
 		dirs := []model.Direction{model.North, model.East, model.South, model.West}
 		for i, d := range dirs {
@@ -414,7 +419,7 @@ func (w *placementWizard) drawLeftPanel(dst *ebiten.Image, mx, my int) {
 		}
 		if w.err != "" {
 			drawTextWrapped(dst, w.err,
-				float64(panelX)+20, float64(panelY)+240,
+				float64(w.panelOX)+20, float64(w.panelOY)+240,
 				float64(spListW)-24, 18, fontS, colorRed)
 		}
 	}

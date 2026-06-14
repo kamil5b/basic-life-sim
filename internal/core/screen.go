@@ -1,9 +1,8 @@
 package core
 
-import "github.com/hajimehoshi/ebiten/v2"
+import "github.com/yohamta/furex/v2"
 
 // Screen is implemented by every game screen.
 type Screen interface {
-	Update(g *Game) error
-	Draw(dst *ebiten.Image)
+	BuildView(g *Game) *furex.View
 }

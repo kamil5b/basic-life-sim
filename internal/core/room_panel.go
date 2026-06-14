@@ -35,6 +35,10 @@ type roomPanel struct {
 	floorFoodFridgeTarget   int  // RoomItems index of fridge being targeted (-1 = none)
 	floorFoodFridgeTargetXY [2]int
 	utilTarget              int // FloorItems index of utility being targeted for interaction
+
+	// door popup
+	doorPopupOpen bool
+	doorCell      [2]int
 }
 
 type rpMode int
@@ -51,6 +55,7 @@ const (
 	rpModeFloorFoodFridgeChoice               // "In World" vs "In Fridge" when dropping food onto a fridge cell
 	rpModeUtilityChoice                       // use utility on food vs place separately
 	rpModeTimeSkip                            // choose how many hours to skip for an activity
+	rpModeDoorPopup                           // door popup (Go to Shop)
 )
 
 func newRoomPanel(char *model.Character, main *mainScreen) *roomPanel {
@@ -62,7 +67,27 @@ func newRoomPanel(char *model.Character, main *mainScreen) *roomPanel {
 		hoverCell:             [2]int{-1, -1},
 		selCell:               [2]int{-1, -1},
 		floorFoodFridgeTarget: -1,
+		doorCell:              [2]int{-1, -1},
 	}
+}
+
+// doorTypeAt returns the door type at grid cell (gx, gy), or -1 if not a door.
+func (p *roomPanel) doorTypeAt(gx, gy int) int {
+	for _, d := range p.char.CurrentHome.Type.Doors {
+		if int(d.X) == gx && int(d.Y) == gy {
+			return int(d.Type)
+		}
+	}
+	return -1
+}
+
+// isDoorCell checks if the grid cell is a door in the layout.
+func (p *roomPanel) isDoorCell(gx, gy int) bool {
+	lt := p.char.CurrentHome.Type.Layout
+	if gy < 0 || gy >= len(lt) || gx < 0 || gx >= len(lt[0]) {
+		return false
+	}
+	return lt[gy][gx] == model.HomeCellDoor
 }
 
 // fridgeAtCell returns the RoomItems index of a storage item whose footprint covers (gx,gy), or -1.
@@ -136,6 +161,7 @@ func (p *roomPanel) gridCellAt(px, py int) (gx, gy int) {
 }
 
 func (p *roomPanel) update() {
+	p.syncLayout()
 	if p.storageWiz != nil {
 		if p.storageWiz.update() {
 			p.storageWiz = nil
@@ -154,6 +180,18 @@ func (p *roomPanel) update() {
 
 		if clicked {
 			if gx >= 0 {
+				// Door click: check door type
+				if p.isDoorCell(gx, gy) {
+					dt := p.doorTypeAt(gx, gy)
+					if dt == int(model.DoorRoomExit) {
+						p.doorPopupOpen = true
+						p.doorCell = [2]int{gx, gy}
+						p.mode = rpModeDoorPopup
+						return
+					}
+					// DoorInternal: reserved, no action
+					return
+				}
 				stacked := p.itemsAtCell(gx, gy)
 				floorItems := p.floorItemsAtCell(gx, gy)
 				if len(stacked) > 0 || len(floorItems) > 0 {
@@ -164,6 +202,22 @@ func (p *roomPanel) update() {
 					return
 				}
 			}
+		}
+
+	case rpModeDoorPopup:
+		// Click anywhere outside door popup closes it
+		if clicked {
+			// "Go to Shop" button
+			bx, by, bw, bh := p.doorGoShopBtnRect()
+			if isHovered(mx, my, bx, by, bw, bh) {
+				p.doorPopupOpen = false
+				p.main.mode = modeShop
+				p.mode = rpModeList
+				return
+			}
+			// Click anywhere else closes popup
+			p.doorPopupOpen = false
+			p.mode = rpModeList
 		}
 
 	case rpModeFiltered:
@@ -223,6 +277,7 @@ func (p *roomPanel) update() {
 			p.wizard = newPlacementWizard(
 				p.char, &placed.Item, p.selItem,
 				rpGridX, rpGridY+20,
+				rpListX, rpListY,
 				"← Cancel",
 				func(x, y, z uint8, dir model.Direction) error {
 					return p.finalizeMove(x, y, z, dir)
@@ -252,6 +307,7 @@ func (p *roomPanel) update() {
 				p.storageWiz = newStorageWizard(
 					p.char, p.selItem,
 					rpGridX, rpGridY+20, rpListX,
+					rpListY-4, p.main.panelH(),
 					nil, nil, 0, false,
 					p.main.setMessage,
 					func() { p.storageWiz = nil },
@@ -457,6 +513,7 @@ func (p *roomPanel) update() {
 			p.storageWiz = newStorageWizard(
 				p.char, fridgeIdx,
 				rpGridX, rpGridY+20, rpListX,
+				rpListY-4, p.main.panelH(),
 				&ffCopy, nil, model.FloorKindFood, false,
 				p.main.setMessage,
 				func() { p.storageWiz = nil },
@@ -794,15 +851,23 @@ func (p *roomPanel) executeTrash(placed *model.PlacedRoomItem) {
 
 // ── layout helpers ────────────────────────────────────────────────────────────
 
-const (
-	rpListX  = panelX + 4
-	rpListW  = 260
-	rpListY  = panelY + 4
-	rpRowH   = float32(26)
-	rpGridX  = rpListX + rpListW + 10
-	rpGridY  = panelY + 4
-	rpCellSz = float32(36)
+var (
+	rpListX float32
+	rpListW = float32(260)
+	rpListY float32
+	rpRowH  = float32(26)
+	rpGridX float32
+	rpGridY float32
 )
+
+const rpCellSz = float32(36)
+
+func (p *roomPanel) syncLayout() {
+	rpListX = p.main.panelX() + 4
+	rpListY = p.main.panelY() + 4
+	rpGridX = rpListX + rpListW + 10
+	rpGridY = p.main.panelY() + 4
+}
 
 func rpItemRowRect(i int) (x, y, w, h float32) {
 	return rpListX, rpListY + float32(i)*rpRowH, rpListW, rpRowH - 2
@@ -813,48 +878,59 @@ func rpActionRowRect(i int) (x, y, w, h float32) {
 }
 
 func rpBackBtnRect() (x, y, w, h float32) {
-	return rpListX, panelY + float32(ScreenH) - float32(tabH) - 50, 100, 32
+	return rpListX, rpListY + rpRowH*20 - 50, 100, 32
 }
 
 func rpMoveBtnRect() (x, y, w, h float32) {
-	return rpListX + 108, panelY + float32(ScreenH) - float32(tabH) - 50, 120, 32
+	return rpListX + 108, rpListY + rpRowH*20 - 50, 120, 32
 }
 
 func rpSellBtnRect() (x, y, w, h float32) {
-	return rpListX + 236, panelY + float32(ScreenH) - float32(tabH) - 50, 80, 32
+	return rpListX + 236, rpListY + rpRowH*20 - 50, 80, 32
 }
 
 func rpTrashBtnRect() (x, y, w, h float32) {
-	return rpListX + 324, panelY + float32(ScreenH) - float32(tabH) - 50, 80, 32
+	return rpListX + 324, rpListY + rpRowH*20 - 50, 80, 32
 }
 
 func rpOrganizeBtnRect() (x, y, w, h float32) {
-	return rpListX + 412, panelY + float32(ScreenH) - float32(tabH) - 50, 100, 32
+	return rpListX + 412, rpListY + rpRowH*20 - 50, 100, 32
 }
 
 func rpFloorFoodEatBtnRect() (x, y, w, h float32) {
-	return rpListX + 108, panelY + float32(ScreenH) - float32(tabH) - 50, 80, 32
+	return rpListX + 108, rpListY + rpRowH*20 - 50, 80, 32
 }
 
 func rpFloorFoodMoveBtnRect() (x, y, w, h float32) {
-	return rpListX + 196, panelY + float32(ScreenH) - float32(tabH) - 50, 90, 32
+	return rpListX + 196, rpListY + rpRowH*20 - 50, 90, 32
 }
 
 func rpFloorFoodTrashBtnRect() (x, y, w, h float32) {
-	return rpListX + 294, panelY + float32(ScreenH) - float32(tabH) - 50, 80, 32
+	return rpListX + 294, rpListY + rpRowH*20 - 50, 80, 32
 }
 
 func rpChoiceInWorldBtnRect() (x, y, w, h float32) {
-	return rpListX, panelY + 120, 200, 48
+	return rpListX, rpListY + 120, 200, 48
 }
 
 func rpChoiceInFridgeBtnRect() (x, y, w, h float32) {
-	return rpListX, panelY + 180, 200, 48
+	return rpListX, rpListY + 180, 200, 48
+}
+
+// doorGoShopBtnRect returns the rect for the "Go to Shop" button in the door popup.
+func (p *roomPanel) doorGoShopBtnRect() (x, y, w, h float32) {
+	// Position near the door cell on the grid
+	ox := rpGridX
+	oy := rpGridY + 20
+	cx := ox + float32(p.doorCell[0])*rpCellSz
+	cy := oy + float32(p.doorCell[1])*rpCellSz
+	return cx - 40, cy + rpCellSz + 4, 140, 32
 }
 
 // ── draw ──────────────────────────────────────────────────────────────────────
 
 func (p *roomPanel) draw(dst *ebiten.Image) {
+	p.syncLayout()
 	if p.storageWiz != nil {
 		p.storageWiz.draw(dst)
 		return
@@ -867,9 +943,9 @@ func (p *roomPanel) draw(dst *ebiten.Image) {
 
 	switch p.mode {
 	case rpModeList:
-		drawText(dst, "Placed Items", float64(rpListX), float64(panelY)+4, fontS, colorMuted)
+		drawText(dst, "Placed Items", float64(rpListX), float64(rpListY)-4, fontS, colorMuted)
 		if len(char.CurrentHome.RoomItems) == 0 && len(char.CurrentHome.FloorItems) == 0 {
-			drawText(dst, "Room is empty. Buy items in the Shop tab.", float64(rpListX), float64(panelY)+28, fontS, colorMuted)
+			drawText(dst, "Room is empty. Buy items in the Shop tab.", float64(rpListX), float64(rpListY)+20, fontS, colorMuted)
 		}
 		// Which items should be highlighted (hovered cell)
 		hoveredIndices := make(map[int]bool)
@@ -896,7 +972,7 @@ func (p *roomPanel) draw(dst *ebiten.Image) {
 		}
 		// floor items summary
 		if len(char.CurrentHome.FloorItems) > 0 {
-			yo := panelY + 20 + float32(len(char.CurrentHome.RoomItems))*rpRowH + 12
+			yo := rpListY + 16 + float32(len(char.CurrentHome.RoomItems))*rpRowH + 12
 			drawText(dst, "Floor Items:", float64(rpListX), float64(yo), fontS, colorMuted)
 			yo += 18
 			for _, fi := range char.CurrentHome.FloorItems {
@@ -909,7 +985,7 @@ func (p *roomPanel) draw(dst *ebiten.Image) {
 			}
 		}
 		if p.hoverCell[0] >= 0 && len(hoveredIndices) > 0 {
-			drawText(dst, "Click cell to select", float64(rpListX), float64(panelY)+10, fontS, colorAccent)
+			drawText(dst, "Click cell to select", float64(rpListX), float64(rpListY)+6, fontS, colorAccent)
 		}
 
 	case rpModeFiltered:
@@ -917,7 +993,7 @@ func (p *roomPanel) draw(dst *ebiten.Image) {
 		floorItems := p.floorItemsAtCell(p.selCell[0], p.selCell[1])
 		total := len(stacked) + len(floorItems)
 		drawText(dst, fmt.Sprintf("Cell (%d,%d) — %d item(s)", p.selCell[0], p.selCell[1], total),
-			float64(rpListX), float64(panelY)+4, fontS, colorAccent)
+			float64(rpListX), float64(rpListY), fontS, colorAccent)
 		for li, itemIdx := range stacked {
 			placed := char.CurrentHome.RoomItems[itemIdx]
 			rx, ry, rw, rh := rpItemRowRect(li)
@@ -971,16 +1047,16 @@ func (p *roomPanel) draw(dst *ebiten.Image) {
 			return
 		}
 		placed := char.CurrentHome.RoomItems[p.selItem]
-		drawText(dst, placed.Item.Name, float64(rpListX), float64(panelY)+4, fontM, colorAccent)
+		drawText(dst, placed.Item.Name, float64(rpListX), float64(rpListY), fontM, colorAccent)
 		drawText(dst, fmt.Sprintf("at (%d,%d,z=%d) facing %s", placed.X, placed.Y, placed.Z, dirName(placed.Direction)),
-			float64(rpListX), float64(panelY)+24, fontS, colorMuted)
+			float64(rpListX), float64(rpListY)+20, fontS, colorMuted)
 
 		if placed.Item.Storage != nil {
 			used := usedSlotCount(&char.CurrentHome.RoomItems[p.selItem])
 			total := placed.Item.Storage.TotalSlots()
 			drawText(dst, fmt.Sprintf("Storage: %d/%d slots", used, total),
-				float64(rpListX), float64(panelY)+44, fontS, colorText)
-			iy := float64(panelY) + 64
+				float64(rpListX), float64(rpListY)+40, fontS, colorText)
+			iy := float64(rpListY) + 60
 			for _, s := range placed.Stored {
 				exp := model.IsExpired(s.Item.PurchaseDate, s.Item.Food.BaseExpiryDays, s.Item.MultiplierUsed, char.CurrentDate)
 				col := colorText
@@ -1000,8 +1076,8 @@ func (p *roomPanel) draw(dst *ebiten.Image) {
 
 		if placed.Item.CookSurface != nil {
 			drawText(dst, fmt.Sprintf("Surface: %d/%d slots", len(placed.OnSurface), placed.Item.CookSurface.Slots),
-				float64(rpListX), float64(panelY)+44, fontS, colorText)
-			iy := float64(panelY) + 64
+				float64(rpListX), float64(rpListY)+40, fontS, colorText)
+			iy := float64(rpListY) + 60
 			for _, sf := range placed.OnSurface {
 				tag := ""
 				if sf.Cooked {
@@ -1013,7 +1089,7 @@ func (p *roomPanel) draw(dst *ebiten.Image) {
 			}
 		}
 
-		actY := float64(panelY) + 180
+		actY := float64(rpListY) + 176
 		drawText(dst, "Actions:", float64(rpListX), actY, fontS, colorMuted)
 		actY += 20
 		for i, act := range placed.Item.Actions {
@@ -1044,9 +1120,9 @@ func (p *roomPanel) draw(dst *ebiten.Image) {
 		}
 		fi := char.CurrentHome.FloorItems[p.selFloorItem]
 		util := char.CurrentHome.FloorItems[p.utilTarget]
-		drawText(dst, "Use Utility?", float64(rpListX), float64(panelY)+16, fontM, colorAccent)
+		drawText(dst, "Use Utility?", float64(rpListX), float64(rpListY)+12, fontM, colorAccent)
 		drawText(dst, fmt.Sprintf("%s + %s", fi.Item.Food.Name, util.Item.Utility.Name),
-			float64(rpListX), float64(panelY)+44, fontS, colorText)
+			float64(rpListX), float64(rpListY)+40, fontS, colorText)
 
 		ex, ey, ew, eh := rpFloorFoodEatBtnRect()
 		drawButton(dst, fmt.Sprintf("Use %s", util.Item.Utility.Name), ex, ey, ew, eh, fontS, isHovered(mx, my, ex, ey, ew, eh), true)
@@ -1071,9 +1147,9 @@ func (p *roomPanel) draw(dst *ebiten.Image) {
 				headCol = colorRed
 			}
 		}
-		drawText(dst, name, float64(rpListX), float64(panelY)+4, fontM, headCol)
+		drawText(dst, name, float64(rpListX), float64(rpListY), fontM, headCol)
 		drawText(dst, fmt.Sprintf("at (%d,%d,z=%d)", fi.X, fi.Y, fi.Z),
-			float64(rpListX), float64(panelY)+22, fontS, colorMuted)
+			float64(rpListX), float64(rpListY)+18, fontS, colorMuted)
 		if isFood {
 			exp := model.IsExpired(fi.Item.PurchaseDate, fi.Item.Food.BaseExpiryDays, 1, char.CurrentDate)
 			expiry := model.ExpiryDate(fi.Item.PurchaseDate, fi.Item.Food.BaseExpiryDays, 1)
@@ -1082,13 +1158,13 @@ func (p *roomPanel) draw(dst *ebiten.Image) {
 			if exp {
 				expTag = fmt.Sprintf("EXPIRED %04d-%02d-%02d", ey, em, ed)
 			}
-			drawText(dst, expTag, float64(rpListX), float64(panelY)+44, fontS, headCol)
+			drawText(dst, expTag, float64(rpListX), float64(rpListY)+40, fontS, headCol)
 			if isInedible(fi.Item.Food) {
-				drawText(dst, "[raw / inedible — eating will penalise stats]", float64(rpListX), float64(panelY)+62, fontS, colorYellow)
+				drawText(dst, "[raw / inedible — eating will penalise stats]", float64(rpListX), float64(rpListY)+58, fontS, colorYellow)
 			}
 		}
 		if p.floorMoveMode {
-			drawText(dst, "→ Click a floor cell to move item there", float64(rpListX), float64(panelY)+82, fontS, colorYellow)
+			drawText(dst, "→ Click a floor cell to move item there", float64(rpListX), float64(rpListY)+78, fontS, colorYellow)
 		}
 
 		bx, by, bw, bh := rpBackBtnRect()
@@ -1118,16 +1194,16 @@ func (p *roomPanel) draw(dst *ebiten.Image) {
 		fridgePlaced := char.CurrentHome.RoomItems[p.floorFoodFridgeTarget]
 		topZ := fridgePlaced.Z + fridgePlaced.Item.Height
 
-		drawText(dst, "Where to put "+ff2.Item.Food.Name+"?", float64(rpListX), float64(panelY)+12, fontM, colorAccent)
+		drawText(dst, "Where to put "+ff2.Item.Food.Name+"?", float64(rpListX), float64(rpListY)+8, fontM, colorAccent)
 		drawText(dst, fmt.Sprintf("Dropping onto: %s at (%d,%d)",
 			fridgePlaced.Item.Name, p.floorFoodFridgeTargetXY[0], p.floorFoodFridgeTargetXY[1]),
-			float64(rpListX), float64(panelY)+36, fontS, colorMuted)
+			float64(rpListX), float64(rpListY)+32, fontS, colorMuted)
 		drawText(dst, fmt.Sprintf("In World: places on top of fridge at z=%d", topZ),
-			float64(rpListX), float64(panelY)+100, fontS, colorMuted)
+			float64(rpListX), float64(rpListY)+96, fontS, colorMuted)
 		drawText(dst, fmt.Sprintf("In Fridge: store inside (%d/%d slots used)",
 			usedSlotCount(&char.CurrentHome.RoomItems[p.floorFoodFridgeTarget]),
 			fridgePlaced.Item.Storage.TotalSlots()),
-			float64(rpListX), float64(panelY)+162, fontS, colorMuted)
+			float64(rpListX), float64(rpListY)+158, fontS, colorMuted)
 
 		iwx, iwy, iww, iwh := rpChoiceInWorldBtnRect()
 		drawButton(dst, "📦 In World (on top)", iwx, iwy, iww, iwh, fontM, isHovered(mx, my, iwx, iwy, iww, iwh), true)
@@ -1142,13 +1218,13 @@ func (p *roomPanel) draw(dst *ebiten.Image) {
 		drawButton(dst, "← Back", bx, by, bw, bh, fontS, isHovered(mx, my, bx, by, bw, bh), true)
 
 	case rpModeMoveGrid:
-		drawText(dst, "Step 1: Click cell to move item", float64(rpListX), float64(panelY)+8, fontS, colorMuted)
+		drawText(dst, "Step 1: Click cell to move item", float64(rpListX), float64(rpListY)+4, fontS, colorMuted)
 		if p.selItem >= 0 && p.selItem < len(char.CurrentHome.RoomItems) {
 			placed := char.CurrentHome.RoomItems[p.selItem]
-			drawText(dst, placed.Item.Name, float64(rpListX), float64(panelY)+28, fontM, colorAccent)
+			drawText(dst, placed.Item.Name, float64(rpListX), float64(rpListY)+24, fontM, colorAccent)
 		}
 		if p.wizard != nil && p.wizard.err != "" {
-			drawTextWrapped(dst, p.wizard.err, float64(rpListX), float64(panelY)+54, float64(rpListW), 18, fontS, colorRed)
+			drawTextWrapped(dst, p.wizard.err, float64(rpListX), float64(rpListY)+50, float64(rpListW), 18, fontS, colorRed)
 		}
 		bx, by, bw, bh := rpBackBtnRect()
 		drawButton(dst, "← Cancel", bx, by, bw, bh, fontS, isHovered(mx, my, bx, by, bw, bh), true)
@@ -1158,10 +1234,10 @@ func (p *roomPanel) draw(dst *ebiten.Image) {
 			return
 		}
 		placed := char.CurrentHome.RoomItems[p.selItem]
-		drawText(dst, placed.Item.Name, float64(rpListX), float64(panelY)+4, fontM, colorAccent)
+		drawText(dst, placed.Item.Name, float64(rpListX), float64(rpListY), fontM, colorAccent)
 		if p.selAct >= 0 && p.selAct < len(placed.Item.Actions) {
 			drawText(dst, fmt.Sprintf("Choose duration for: %s", placed.Item.Actions[p.selAct]),
-				float64(rpListX), float64(panelY)+28, fontS, colorText)
+				float64(rpListX), float64(rpListY)+24, fontS, colorText)
 		}
 		hours := []int{1, 2, 4, 8}
 		for i, h := range hours {
@@ -1179,6 +1255,9 @@ func (p *roomPanel) draw(dst *ebiten.Image) {
 		}
 		bx, by, bw, bh := rpBackBtnRect()
 		drawButton(dst, "← Back", bx, by, bw, bh, fontS, isHovered(mx, my, bx, by, bw, bh), true)
+
+	case rpModeDoorPopup:
+		// Popup drawn in drawRoomGrid overlay
 	}
 }
 
@@ -1315,7 +1394,11 @@ func (p *roomPanel) drawRoomGrid(dst *ebiten.Image) {
 		if hx >= 0 {
 			cx := ox + float32(hx)*rpCellSz
 			cy := oy + float32(hy)*rpCellSz
-			strokeRect(dst, cx, cy, rpCellSz-1, rpCellSz-1, colorAccent)
+			borderColor := colorAccent
+			if p.isDoorCell(hx, hy) {
+				borderColor = colorYellow
+			}
+			strokeRect(dst, cx, cy, rpCellSz-1, rpCellSz-1, borderColor)
 		}
 	}
 
@@ -1327,4 +1410,21 @@ func (p *roomPanel) drawRoomGrid(dst *ebiten.Image) {
 	}
 
 	drawText(dst, fmt.Sprintf("Room: %s", home.Type.Name), float64(ox), float64(oy)-18, fontS, colorMuted)
+
+	// Door popup overlay
+	if p.doorPopupOpen {
+		// Semi-transparent backdrop on grid area only
+		// Draw popup box near the door cell
+		mx, my := ebiten.CursorPosition()
+		bx, by, bw, bh := p.doorGoShopBtnRect()
+		// Popup background
+		popX := bx - 30
+		popY := by - 38
+		popW := bw + 60
+		popH := bh + 46
+		fillRect(dst, popX, popY, popW, popH, colorBg)
+		strokeRect(dst, popX, popY, popW, popH, colorAccent)
+		drawText(dst, "🚪 Door", float64(popX)+10, float64(popY)+10, fontS, colorMuted)
+		drawButton(dst, "Go to Shop", bx, by, bw, bh, fontM, isHovered(mx, my, bx, by, bw, bh), true)
+	}
 }

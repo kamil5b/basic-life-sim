@@ -2,10 +2,12 @@ package core
 
 import (
 	"fmt"
+	"image"
+	"image/color"
 
 	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
+	"github.com/yohamta/furex/v2"
 )
 
 type titleScreen struct {
@@ -17,169 +19,225 @@ type titleScreen struct {
 
 func newTitleScreen() *titleScreen { return &titleScreen{} }
 
-var titleButtons = []string{"New Game", "Load Game", "Exit"}
+func (s *titleScreen) BuildView(g *Game) *furex.View {
+	return s.build(g)
+}
 
-func (s *titleScreen) Update(g *Game) error {
-	mx, my := ebiten.CursorPosition()
-	clicked := inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft)
+func (s *titleScreen) build(g *Game) *furex.View {
+	root := &furex.View{
+		Direction:  furex.Column,
+		Justify:    furex.JustifyCenter,
+		AlignItems: furex.AlignItemCenter,
+	}
+
+	root.AddChild(&furex.View{
+		Height:  80,
+		Handler: &centerLabel{text: "BASIC LIFE SIMULATOR", font: fontXL, clr: colorAccent},
+	})
+	root.AddChild(&furex.View{
+		Height:  30,
+		Handler: &centerLabel{text: "A life simulation game", font: fontM, clr: colorMuted},
+	})
+	root.AddChild(&furex.View{Height: 50})
 
 	if s.loadMode {
-		backX := float32(ScreenW)/2 - 120
-		backY := float32(ScreenH) - 100
-		if clicked && isHovered(mx, my, backX, backY, 240, 46) {
-			s.loadMode = false
-			s.loadMsg = ""
-			return nil
-		}
-
-		for i := range s.saves {
-			rx, ry, rw, rh := titleSaveRowRect(i)
-			if clicked && isHovered(mx, my, rx, ry, rw, rh) {
-				s.selIdx = i
-			}
-		}
-
-		if s.selIdx >= 0 && s.selIdx < len(s.saves) {
-			lx, ly, lw, lh := titleLoadActionRect(s.selIdx, 0)
-			if clicked && isHovered(mx, my, lx, ly, lw, lh) {
-				char, err := loadGame(s.saves[s.selIdx].Name)
-				if err != nil {
-					s.loadMsg = fmt.Sprintf("Load failed: %v", err)
-				} else {
-					g.SetScreen(newMainScreen(char))
-				}
-				return nil
-			}
-			dx, dy, dw, dh := titleLoadActionRect(s.selIdx, 1)
-			if clicked && isHovered(mx, my, dx, dy, dw, dh) {
-				if err := deleteSave(s.saves[s.selIdx].Name); err != nil {
-					s.loadMsg = fmt.Sprintf("Delete failed: %v", err)
-				} else {
-					names, _ := listSaveFiles()
-					s.saves = make([]SaveInfo, 0, len(names))
-					for _, n := range names {
-						s.saves = append(s.saves, peekSaveInfo(n))
-					}
-					s.selIdx = -1
-				}
-				return nil
-			}
-		}
-		return nil
-	}
-
-	if clicked {
-		for i, lbl := range titleButtons {
-			x, y, w, h := titleButtonRect(i)
-			if isHovered(mx, my, x, y, w, h) {
-				switch lbl {
-				case "New Game":
-					g.SetScreen(newNewGameScreen())
-				case "Load Game":
-					s.loadMode = true
-					s.selIdx = -1
-					s.loadMsg = ""
-					names, _ := listSaveFiles()
-					s.saves = make([]SaveInfo, 0, len(names))
-					for _, n := range names {
-						s.saves = append(s.saves, peekSaveInfo(n))
-					}
-				case "Exit":
-					return ebiten.Termination
-				}
-			}
+		s.buildLoadMode(root, g)
+	} else {
+		for _, lbl := range []string{"New Game", "Load Game", "Exit"} {
+			l := lbl
+			root.AddChild(&furex.View{
+				Width:        240,
+				Height:       46,
+				MarginBottom: 16,
+				Handler: &simpleBtn{
+					label: l,
+					font:  fontM,
+					action: func() {
+						switch l {
+						case "New Game":
+							g.SetScreen(newNewGameScreen())
+						case "Load Game":
+							s.loadMode = true
+							s.selIdx = -1
+							s.loadMsg = ""
+							names, _ := listSaveFiles()
+							s.saves = make([]SaveInfo, 0, len(names))
+							for _, n := range names {
+								s.saves = append(s.saves, peekSaveInfo(n))
+							}
+						case "Exit":
+							g.shouldExit = true
+						}
+					},
+				},
+			})
 		}
 	}
-	return nil
+
+	return root
 }
 
-func (s *titleScreen) Draw(dst *ebiten.Image) {
-	cx := float64(ScreenW) / 2
+func (s *titleScreen) buildLoadMode(root *furex.View, g *Game) {
+	root.AddChild(&furex.View{
+		Height:  50,
+		Handler: &centerLabel{text: "LOAD GAME", font: fontL, clr: colorAccent},
+	})
 
-	if s.loadMode {
-		drawText(dst, "LOAD GAME", cx-60, 160, fontL, colorAccent)
-		mx, my := ebiten.CursorPosition()
-
-		if len(s.saves) == 0 {
-			drawText(dst, "No save files found.", cx-100, 240, fontM, colorMuted)
-		} else {
-			for i, info := range s.saves {
-				rx, ry, rw, rh := titleSaveRowRect(i)
-				sel := i == s.selIdx
-				bg := colorPanel
-				if sel {
-					bg = colorSelected
-				} else if isHovered(mx, my, rx, ry, rw, rh) {
-					bg = colorHighlight
-				}
-				fillRect(dst, rx, ry, rw, rh, bg)
-				strokeRect(dst, rx, ry, rw, rh, colorBorder)
-				if info.Exists {
-					drawText(dst, fmt.Sprintf("%s  %s  Age:%d  %s", info.Name, info.CharName, info.Age, info.Date),
-						float64(rx)+10, float64(ry)+4, fontS, colorText)
-					drawText(dst, fmt.Sprintf("Saved: %s", info.SavedAt),
-						float64(rx)+10, float64(ry)+22, fontS, colorMuted)
-				} else {
-					drawText(dst, info.Name, float64(rx)+10, float64(ry)+12, fontM, colorText)
-				}
-			}
-
-			if s.selIdx >= 0 && s.selIdx < len(s.saves) {
-				lx, ly, lw, lh := titleLoadActionRect(s.selIdx, 0)
-				drawButton(dst, "Load", lx, ly, lw, lh, fontM, isHovered(mx, my, lx, ly, lw, lh), true)
-				dx, dy, dw, dh := titleLoadActionRect(s.selIdx, 1)
-				drawButton(dst, "Delete", dx, dy, dw, dh, fontM, isHovered(mx, my, dx, dy, dw, dh), true)
-			}
+	if len(s.saves) == 0 {
+		root.AddChild(&furex.View{
+			Height:  40,
+			Handler: &centerLabel{text: "No save files found.", font: fontM, clr: colorMuted},
+		})
+	} else {
+		for i, info := range s.saves {
+			idx := i
+			inf := info
+			root.AddChild(&furex.View{
+				Width:  500,
+				Height: 44,
+				Handler: &loadSlot{
+					s:    s,
+					g:    g,
+					idx:  idx,
+					info: inf,
+				},
+			})
 		}
-
-		backX := float32(ScreenW)/2 - 120
-		backY := float32(ScreenH) - 100
-		drawButton(dst, "← Back", backX, backY, 240, 46, fontM, isHovered(mx, my, backX, backY, 240, 46), true)
-
-		if s.loadMsg != "" {
-			mw, _ := text.Measure(s.loadMsg, fontS, 0)
-			drawText(dst, s.loadMsg, cx-mw/2, float64(ScreenH)-140, fontS, colorRed)
-		}
-		return
 	}
 
-	title := "BASIC LIFE SIMULATOR"
-	tw, _ := text.Measure(title, fontXL, 0)
-	drawText(dst, title, cx-tw/2, 180, fontXL, colorAccent)
+	if s.loadMsg != "" {
+		root.AddChild(&furex.View{
+			Height:  30,
+			Handler: &centerLabel{text: s.loadMsg, font: fontS, clr: colorRed},
+		})
+	}
 
-	sub := "A life simulation game"
-	sw, _ := text.Measure(sub, fontM, 0)
-	drawText(dst, sub, cx-sw/2, 224, fontM, colorMuted)
+	root.AddChild(&furex.View{
+		Width:     240,
+		Height:    46,
+		MarginTop: 20,
+		Handler: &simpleBtn{
+			label: "← Back",
+			font:  fontM,
+			action: func() {
+				s.loadMode = false
+			},
+		},
+	})
+}
 
+// ── shared handlers ──────────────────────────────────────────────────────────
+
+type centerLabel struct {
+	text string
+	font *text.GoTextFace
+	clr  color.RGBA
+}
+
+func (c *centerLabel) Draw(screen *ebiten.Image, frame image.Rectangle, v *furex.View) {
+	tw, _ := text.Measure(c.text, c.font, 0)
+	x := float64(frame.Min.X) + float64(frame.Dx())/2 - tw/2
+	y := float64(frame.Min.Y) + float64(frame.Dy())/2 + 4
+	drawText(screen, c.text, x, y, c.font, c.clr)
+}
+
+type simpleBtn struct {
+	label  string
+	font   *text.GoTextFace
+	action func()
+}
+
+func (b *simpleBtn) Draw(screen *ebiten.Image, frame image.Rectangle, v *furex.View) {
 	mx, my := ebiten.CursorPosition()
-	for i, lbl := range titleButtons {
-		x, y, w, h := titleButtonRect(i)
-		drawButton(dst, lbl, x, y, w, h, fontM, isHovered(mx, my, x, y, w, h), true)
+	x, y := float32(frame.Min.X), float32(frame.Min.Y)
+	w, h := float32(frame.Dx()), float32(frame.Dy())
+	drawButton(screen, b.label, x, y, w, h, b.font, isHovered(mx, my, x, y, w, h), true)
+}
+
+func (b *simpleBtn) HandleJustPressedMouseButtonLeft(x, y int) bool {
+	if b.action != nil {
+		b.action()
+	}
+	return true
+}
+
+func (b *simpleBtn) HandleJustReleasedMouseButtonLeft(x, y int) {}
+
+type loadSlot struct {
+	s     *titleScreen
+	g     *Game
+	idx   int
+	info  SaveInfo
+	frame image.Rectangle
+}
+
+func (ls *loadSlot) Draw(screen *ebiten.Image, frame image.Rectangle, v *furex.View) {
+	ls.frame = frame
+	mx, my := ebiten.CursorPosition()
+	x, y := float32(frame.Min.X), float32(frame.Min.Y)
+	w, h := float32(frame.Dx()), float32(frame.Dy())
+
+	sel := ls.idx == ls.s.selIdx
+	bg := colorPanel
+	if sel {
+		bg = colorSelected
+	} else if isHovered(mx, my, x, y, w, h) {
+		bg = colorHighlight
+	}
+	fillRect(screen, x, y, w, h, bg)
+	strokeRect(screen, x, y, w, h, colorBorder)
+
+	if ls.info.Exists {
+		drawText(screen, fmt.Sprintf("%s  %s  Age:%d  %s", slotName(ls.idx), ls.info.CharName, ls.info.Age, ls.info.Date),
+			float64(x)+10, float64(y)+4, fontS, colorText)
+		drawText(screen, fmt.Sprintf("Saved: %s", ls.info.SavedAt),
+			float64(x)+10, float64(y)+22, fontS, colorMuted)
+
+		if sel {
+			ax := x + w - 220
+			ay := y + 4
+			drawButton(screen, "Load", ax, ay, 100, 36, fontM, isHovered(mx, my, ax, ay, 100, 36), true)
+			drawButton(screen, "Delete", ax+108, ay, 100, 36, fontM, isHovered(mx, my, ax+108, ay, 100, 36), true)
+		}
+	} else {
+		drawText(screen, fmt.Sprintf("%s  [empty]", slotName(ls.idx)),
+			float64(x)+10, float64(y)+12, fontS, colorText)
 	}
 }
 
-func titleButtonRect(i int) (x, y, w, h float32) {
-	w, h = 240, 46
-	x = float32(ScreenW)/2 - w/2
-	y = float32(310 + i*62)
-	return
-}
+func (ls *loadSlot) HandleJustPressedMouseButtonLeft(px, py int) bool {
+	ls.s.selIdx = ls.idx
+	x := float32(ls.frame.Min.X)
+	y := float32(ls.frame.Min.Y)
+	w := float32(ls.frame.Dx())
 
-func titleSaveRowRect(i int) (x, y, w, h float32) {
-	w = 500
-	h = 44
-	x = float32(ScreenW)/2 - w/2
-	y = float32(230 + i*54)
-	return
-}
-
-func titleLoadActionRect(row, actionIdx int) (x, y, w, h float32) {
-	w = 100
-	h = 36
-	x = float32(ScreenW)/2 + 260
-	y = float32(230 + row*54 + 4)
-	if actionIdx == 1 {
-		x += 108
+	if ls.idx >= 0 && ls.idx < len(ls.s.saves) && ls.s.saves[ls.idx].Exists {
+		ax := x + w - 220
+		ay := y + 4
+		if isHovered(px, py, ax, ay, 100, 36) {
+			char, err := loadGame(ls.s.saves[ls.idx].Name)
+			if err != nil {
+				ls.s.loadMsg = fmt.Sprintf("Load failed: %v", err)
+			} else {
+				ls.g.SetScreen(newMainScreen(char))
+			}
+			return true
+		}
+		if isHovered(px, py, ax+108, ay, 100, 36) {
+			if err := deleteSave(ls.s.saves[ls.idx].Name); err != nil {
+				ls.s.loadMsg = fmt.Sprintf("Delete failed: %v", err)
+			} else {
+				names, _ := listSaveFiles()
+				ls.s.saves = make([]SaveInfo, 0, len(names))
+				for _, n := range names {
+					ls.s.saves = append(ls.s.saves, peekSaveInfo(n))
+				}
+				ls.s.selIdx = -1
+			}
+			return true
+		}
 	}
-	return
+	return true
 }
+
+func (ls *loadSlot) HandleJustReleasedMouseButtonLeft(x, y int) {}

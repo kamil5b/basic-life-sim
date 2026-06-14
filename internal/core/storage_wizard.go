@@ -50,6 +50,10 @@ type storageWizard struct {
 	gridX, gridY float32
 	infoX        float32
 
+	// frame origin Y (from content frame)
+	frameY float32
+	frameH float32 // content frame height
+
 	setMsg   func(string)
 	onCancel func()
 	onDone   func()
@@ -59,6 +63,8 @@ func newStorageWizard(
 	char *model.Character,
 	storageIdx int,
 	gridX, gridY, infoX float32,
+	frameY float32,
+	frameH float32,
 	pendingFood *model.Food,
 	pendingUtility *model.Utility,
 	pendingKind model.FloorItemKind,
@@ -82,6 +88,8 @@ func newStorageWizard(
 		gridX:          gridX,
 		gridY:          gridY,
 		infoX:          infoX,
+		frameY:         frameY,
+		frameH:         frameH,
 		setMsg:         setMsg,
 		onCancel:       onCancel,
 		onDone:         onDone,
@@ -296,15 +304,15 @@ func (w *storageWizard) rotateBtnRect(storage *model.StorageCapacity) (x, y, w2,
 }
 
 func (w *storageWizard) backBtnRect() (x, y, width, height float32) {
-	return panelX + 4, float32(ScreenH) - float32(tabH) - 50, 100, 32
+	return w.infoX, w.frameY + w.frameH - 50, 100, 32
 }
 
 func (w *storageWizard) action1BtnRect() (x, y, width, height float32) {
-	return panelX + 110, float32(ScreenH) - float32(tabH) - 50, 140, 32
+	return w.infoX + 106, w.frameY + w.frameH - 50, 140, 32
 }
 
 func (w *storageWizard) action2BtnRect() (x, y, width, height float32) {
-	return panelX + 258, float32(ScreenH) - float32(tabH) - 50, 130, 32
+	return w.infoX + 254, w.frameY + w.frameH - 50, 130, 32
 }
 
 // ── coordinate converters ─────────────────────────────────────────────────────
@@ -599,19 +607,19 @@ func (w *storageWizard) draw(dst *ebiten.Image) {
 			price = w.pendingUtility.BasePrice
 		}
 
-		drawText(dst, "Place in "+placed.Item.Name, lx, float64(panelY)+14, fontM, colorAccent)
+		drawText(dst, "Place in "+placed.Item.Name, lx, float64(w.frameY)+14, fontM, colorAccent)
 		usesStr := ""
 		if w.pendingKind == model.FloorKindFood {
 			usesStr = fmt.Sprintf(" uses:%d", usesTotal)
 		}
 		drawText(dst, fmt.Sprintf("Buying: %s  $%.2f%s",
 			itemName, price, usesStr),
-			lx, float64(panelY)+38, fontS, colorText)
+			lx, float64(w.frameY)+38, fontS, colorText)
 		drawText(dst, fmt.Sprintf("Orientation: %s  (%dx%dx%d W×L×H)  %d/%d slots",
 			rotationLabel[w.rotationIdx%6], baseItem.Width, baseItem.Length, baseItem.Height, used, total),
-			lx, float64(panelY)+56, fontS, colorMuted)
+			lx, float64(w.frameY)+56, fontS, colorMuted)
 		drawText(dst, "❄ = cold zone  Step 1: pick Z  Step 2: pick XY",
-			lx, float64(panelY)+74, fontS, colorMuted)
+			lx, float64(w.frameY)+74, fontS, colorMuted)
 
 		if w.fullySelected() {
 			slotX, slotY := uint8(w.selSlotX), uint8(w.selSlotY)
@@ -635,42 +643,42 @@ func (w *storageWizard) draw(dst *ebiten.Image) {
 					col = colorRed
 					msg = fmt.Sprintf("(x=%d,y=%d,%s) — does not fit", slotX, slotY, zDesc)
 				}
-				drawText(dst, msg, lx, float64(panelY)+96, fontS, col)
+				drawText(dst, msg, lx, float64(w.frameY)+96, fontS, col)
 			} else {
 				msg := fmt.Sprintf("(x=%d,y=%d,%s)", slotX, slotY, zDesc)
 				if !canPlace {
 					col = colorRed
 					msg = fmt.Sprintf("(x=%d,y=%d,%s) — does not fit", slotX, slotY, zDesc)
 				}
-				drawText(dst, msg, lx, float64(panelY)+96, fontS, col)
+				drawText(dst, msg, lx, float64(w.frameY)+96, fontS, col)
 			}
 			a1x, a1y, a1w, a1h := w.action1BtnRect()
 			drawButton(dst, "✓ Place Here", a1x, a1y, a1w, a1h, fontM,
 				isHovered(mx, my, a1x, a1y, a1w, a1h) && canPlace, canPlace)
 		} else if w.selZ >= 0 {
 			drawText(dst, fmt.Sprintf("Z=%d selected — now pick XY slot", w.selZ),
-				lx, float64(panelY)+96, fontS, colorMuted)
+				lx, float64(w.frameY)+96, fontS, colorMuted)
 		} else {
 			drawText(dst, "Click a Z cell on the left column first",
-				lx, float64(panelY)+96, fontS, colorMuted)
+				lx, float64(w.frameY)+96, fontS, colorMuted)
 		}
 	} else {
-		drawText(dst, placed.Item.Name+" Interior", lx, float64(panelY)+4, fontM, colorAccent)
+		drawText(dst, placed.Item.Name+" Interior", lx, float64(w.frameY)+4, fontM, colorAccent)
 		drawText(dst, fmt.Sprintf("%d/%d slots used", used, total),
-			lx, float64(panelY)+26, fontS, colorMuted)
+			lx, float64(w.frameY)+26, fontS, colorMuted)
 		drawText(dst, "Step 1: pick Z  Step 2: pick XY",
-			lx, float64(panelY)+44, fontS, colorMuted)
+			lx, float64(w.frameY)+44, fontS, colorMuted)
 
 		if w.moveMode && w.movingItemIdx >= 0 {
 			sf := placed.Stored[w.movingItemIdx]
 			mf := applyRotation(sf.Item.Food, w.rotationIdx)
 			drawText(dst, fmt.Sprintf("Moving: %s", mf.Name),
-				lx, float64(panelY)+66, fontS, colorYellow)
+				lx, float64(w.frameY)+66, fontS, colorYellow)
 			drawText(dst, fmt.Sprintf("Orientation: %s  (%dx%dx%d W×L×H)",
 				rotationLabel[w.rotationIdx%6], mf.Width, mf.Length, mf.Height),
-				lx, float64(panelY)+84, fontS, colorMuted)
+				lx, float64(w.frameY)+84, fontS, colorMuted)
 			drawText(dst, "Pick Z then XY target slot",
-				lx, float64(panelY)+84, fontS, colorMuted)
+				lx, float64(w.frameY)+84, fontS, colorMuted)
 		} else if w.fullySelected() {
 			foodIdx := w.findFoodAtSel(&placed)
 			if foodIdx >= 0 {
@@ -683,10 +691,10 @@ func (w *storageWizard) draw(dst *ebiten.Image) {
 				expiry := model.ExpiryDate(sf.Item.PurchaseDate, sf.Item.Food.BaseExpiryDays, sf.Item.MultiplierUsed)
 				ey, em, ed := expiry.Unpack()
 				drawText(dst, fmt.Sprintf("Selected: %s", sf.Item.Food.Name),
-					lx, float64(panelY)+66, fontS, col)
+					lx, float64(w.frameY)+66, fontS, col)
 				drawText(dst, fmt.Sprintf("uses:%d  (x=%d,y=%d,z=%d)  exp:%04d-%02d-%02d",
 					sf.Item.UsesRemaining, sf.SlotX, sf.SlotY, sf.SlotZ, ey, em, ed),
-					lx, float64(panelY)+84, fontS, colorMuted)
+					lx, float64(w.frameY)+84, fontS, colorMuted)
 
 				takeEnabled := !w.hasFoodOnTop()
 				takeLabel := "Take Out"
@@ -701,14 +709,14 @@ func (w *storageWizard) draw(dst *ebiten.Image) {
 					isHovered(mx, my, a2x, a2y, a2w, a2h), true)
 			} else {
 				drawText(dst, fmt.Sprintf("Empty slot (x=%d,y=%d,z=%d)", w.selSlotX, w.selSlotY, w.selZ),
-					lx, float64(panelY)+66, fontS, colorMuted)
+					lx, float64(w.frameY)+66, fontS, colorMuted)
 			}
 		} else if w.selZ >= 0 {
 			drawText(dst, fmt.Sprintf("Z=%d — pick XY slot", w.selZ),
-				lx, float64(panelY)+66, fontS, colorMuted)
+				lx, float64(w.frameY)+66, fontS, colorMuted)
 		} else {
 			drawText(dst, "Click a Z cell to start",
-				lx, float64(panelY)+66, fontS, colorMuted)
+				lx, float64(w.frameY)+66, fontS, colorMuted)
 		}
 	}
 

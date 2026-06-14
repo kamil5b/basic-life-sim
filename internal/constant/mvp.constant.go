@@ -72,6 +72,7 @@ var (
 	Indekos = model.HomeType{
 		Name:           HomeNameTypeIndekos,
 		Layout:         IndekosLayout,
+		Doors:          []model.DoorDef{{X: 5, Y: 0, Type: model.DoorRoomExit}},
 		Level:          1,
 		MaxHeight:      3,
 		SharedBathroom: true,
@@ -80,8 +81,12 @@ var (
 		MonthlyCost:    300,
 	}
 	IndekosWithBathroom = model.HomeType{
-		Name:           HomeNameTypeIndekosWithBathroom,
-		Layout:         IndekosWithBathroomLayout,
+		Name:   HomeNameTypeIndekosWithBathroom,
+		Layout: IndekosWithBathroomLayout,
+		Doors: []model.DoorDef{
+			{X: 5, Y: 0, Type: model.DoorRoomExit},
+			{X: 4, Y: 2, Type: model.DoorInternal},
+		},
 		MaxHeight:      3,
 		Level:          1,
 		SharedBathroom: false,
@@ -90,8 +95,12 @@ var (
 		MonthlyCost:    450,
 	}
 	SmallApartmentStudio = model.HomeType{
-		Name:           HomeNameTypeSmallApartmentStudio,
-		Layout:         SmallApartmentStudioLayout,
+		Name:   HomeNameTypeSmallApartmentStudio,
+		Layout: SmallApartmentStudioLayout,
+		Doors: []model.DoorDef{
+			{X: 7, Y: 0, Type: model.DoorRoomExit},
+			{X: 5, Y: 1, Type: model.DoorInternal},
+		},
 		MaxHeight:      5,
 		Level:          2,
 		SharedBathroom: false,
@@ -100,8 +109,13 @@ var (
 		MonthlyCost:    800,
 	}
 	SmallApartment1Bedroom = model.HomeType{
-		Name:           HomeNameTypeSmallApartment1BedroomLayout,
-		Layout:         SmallApartment1BedroomLayout,
+		Name:   HomeNameTypeSmallApartment1BedroomLayout,
+		Layout: SmallApartment1BedroomLayout,
+		Doors: []model.DoorDef{
+			{X: 7, Y: 0, Type: model.DoorRoomExit},
+			{X: 5, Y: 1, Type: model.DoorInternal},
+			{X: 5, Y: 5, Type: model.DoorInternal},
+		},
 		Level:          2,
 		MaxHeight:      5,
 		SharedBathroom: false,

@@ -15,9 +15,24 @@ const (
 // HomeCellDoor  - not available for placement, used as exit point
 type HomeLayout [][]HomeCell
 
+// DoorType tags the purpose of a door cell.
+type DoorType uint8
+
+const (
+	DoorRoomExit DoorType = iota // connects to outside world (Shop)
+	DoorInternal                 // reserved for future room transitions
+)
+
+// DoorDef maps a door cell position to its type.
+type DoorDef struct {
+	X, Y uint8
+	Type DoorType
+}
+
 type HomeType struct {
 	Name           string
 	Layout         HomeLayout
+	Doors          []DoorDef // door cell → type mapping
 	MaxHeight      uint8
 	Level          uint8
 	SharedBathroom bool // if true, there will be random events where the bathroom is occupied

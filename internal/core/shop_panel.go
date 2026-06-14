@@ -99,6 +99,7 @@ func (p *shopPanel) currentCatalog() []model.RoomItem {
 }
 
 func (p *shopPanel) update() {
+	p.syncLayout()
 	if p.storageWiz != nil {
 		if p.storageWiz.update() {
 			p.storageWiz = nil
@@ -117,6 +118,11 @@ func (p *shopPanel) update() {
 		if !clicked {
 			return
 		}
+		// Back to Room button
+		if isHovered(mx, my, spPanelX+4, spPanelY+4, 100, 28) {
+			p.main.mode = modeRoom
+			return
+		}
 		// category tabs
 		for i := range spCatLabels {
 			tx, ty, tw, th := spCatTabRect(i)
@@ -128,9 +134,9 @@ func (p *shopPanel) update() {
 			}
 		}
 		// sort buttons
-		sortY := panelY + 36
+		sortY := spPanelY + 36
 		for si := 0; si < 3; si++ {
-			sx := panelX + 4 + float32(si)*54
+			sx := spPanelX + 4 + float32(si)*54
 			if isHovered(mx, my, sx, sortY, 50, 16) {
 				if spSort(si) == p.sortBy {
 					p.sortAsc = !p.sortAsc
@@ -144,13 +150,13 @@ func (p *shopPanel) update() {
 			}
 		}
 		// page prev/next
-		pageY := panelY + 52
-		if isHovered(mx, my, panelX+4, pageY, 28, 22) && p.page > 0 {
+		pageY := spPanelY + 52
+		if isHovered(mx, my, spPanelX+4, pageY, 28, 22) && p.page > 0 {
 			p.page--
 			p.selItem = -1
 			return
 		}
-		nx2 := panelX + spListW - 40
+		nx2 := spPanelX + spListW - 40
 		if isHovered(mx, my, nx2, pageY, 28, 22) && p.page < p.totalPages()-1 {
 			p.page++
 			p.selItem = -1
@@ -158,9 +164,9 @@ func (p *shopPanel) update() {
 		}
 		// item rows (page-relative → real index)
 		page := p.catalogPage()
-		rowBaseY := float32(panelY) + 78
+		rowBaseY := spPanelY + 78
 		for pi, idx := range page {
-			rx := float32(panelX) + 4
+			rx := spPanelX + 4
 			ry := rowBaseY + float32(pi)*30
 			rw := spListW - 8
 			rh := float32(26)
@@ -301,8 +307,8 @@ func (p *shopPanel) update() {
 		}
 		// Storage options as buttons
 		for i, fri := range p.storageOptions {
-			bx := float32(panelX) + 20
-			by := float32(panelY) + 80 + float32(i)*40
+			bx := spPanelX + 20
+			by := spPanelY + 80 + float32(i)*40
 			bw := float32(200)
 			bh := float32(34)
 			if isHovered(mx, my, bx, by, bw, bh) {
@@ -310,7 +316,8 @@ func (p *shopPanel) update() {
 					f := *p.pendingFood
 					p.storageWiz = newStorageWizard(
 						char, fri,
-						spGridOriginX(), spGridOriginY(), panelX+8,
+						spGridOriginX(), spGridOriginY(), spPanelX+8,
+						spPanelY, spPanelH,
 						&f, nil, model.FloorKindFood, true,
 						p.main.setMessage,
 						func() {
@@ -328,7 +335,8 @@ func (p *shopPanel) update() {
 					u := *p.pendingUtility
 					p.storageWiz = newStorageWizard(
 						char, fri,
-						spGridOriginX(), spGridOriginY(), panelX+8,
+						spGridOriginX(), spGridOriginY(), spPanelX+8,
+						spPanelY, spPanelH,
 						nil, &u, model.FloorKindUtility, true,
 						p.main.setMessage,
 						func() {
@@ -423,6 +431,7 @@ func (p *shopPanel) tryBeginPlace() {
 		p.wizard = newPlacementWizard(
 			p.char, p.pendingItem, -1,
 			spGridOriginX(), spGridOriginY(),
+			spPanelX, spPanelY,
 			"✕ Cancel",
 			func(x, y, z uint8, dir model.Direction) error {
 				return p.finalizeItemPlace(x, y, z, dir)
@@ -496,7 +505,8 @@ func (p *shopPanel) finalizeFoodPlace() {
 		fri := p.storageOptions[0]
 		p.storageWiz = newStorageWizard(
 			char, fri,
-			spGridOriginX(), spGridOriginY(), panelX+8,
+			spGridOriginX(), spGridOriginY(), spPanelX+8,
+			spPanelY, spPanelH,
 			&f, nil, model.FloorKindFood, true,
 			p.main.setMessage,
 			func() {
@@ -612,7 +622,8 @@ func (p *shopPanel) finalizeUtilityPlace() {
 		fri := p.storageOptions[0]
 		p.storageWiz = newStorageWizard(
 			char, fri,
-			spGridOriginX(), spGridOriginY(), panelX+8,
+			spGridOriginX(), spGridOriginY(), spPanelX+8,
+			spPanelY, spPanelH,
 			nil, &u, model.FloorKindUtility, true,
 			p.main.setMessage,
 			func() {
@@ -698,48 +709,60 @@ func (p *shopPanel) useUtilityOnFood(f *model.Food, util model.FloorItem) {
 
 const spListW = float32(340) // catalog list occupies the left slice of the panel
 
+var (
+	spPanelX float32
+	spPanelY float32
+	spPanelW float32
+	spPanelH float32
+	zColX    float32
+	zColY    float32
+	zCellW   = float32(48)
+	zCellH   = float32(38)
+)
+
+func (p *shopPanel) syncLayout() {
+	spPanelX = p.main.panelX()
+	spPanelY = p.main.panelY()
+	spPanelW = p.main.panelW()
+	spPanelH = p.main.panelH()
+	zColX = spPanelX + 60
+	zColY = spPanelY + 60
+}
+
 func spCatTabRect(i int) (x, y, w, h float32) {
 	w = (spListW - 8) / float32(len(spCatLabels))
 	h = 30
-	x = panelX + 4 + float32(i)*w
-	y = panelY + 4
+	x = spPanelX + 4 + float32(i)*w
+	y = spPanelY + 4
 	return
 }
 
 func spItemRowRect(i int) (x, y, w, h float32) {
-	return panelX + 4, panelY + 42 + float32(i)*32, spListW - 8, 28
+	return spPanelX + 4, spPanelY + 42 + float32(i)*32, spListW - 8, 28
 }
 
 func spBuyBtnRect() (x, y, w, h float32) {
-	return panelX + 4, float32(ScreenH) - 60, 160, 38
+	return spPanelX + 4, spPanelY + spPanelH - 60, 160, 38
 }
 
 // Cancel sits top-right of the panel, never overlapping action buttons.
 func spCancelBtnRect() (x, y, w, h float32) {
-	return panelX + spListW - 100, panelY + 4, 96, 28
+	return spPanelX + spListW - 100, spPanelY + 4, 96, 28
 }
 
 func spStackMixBtnRect() (x, y, w, h float32) {
-	return panelX + 4, panelY + 80, 160, 44
+	return spPanelX + 4, spPanelY + 80, 160, 44
 }
 
 func spStackSepBtnRect() (x, y, w, h float32) {
-	return panelX + 4, panelY + 136, 200, 44
+	return spPanelX + 4, spPanelY + 136, 200, 44
 }
 
 func spRecipeBtnRect() (x, y, w, h float32) {
-	return panelX + 4, panelY + 192, 240, 44
+	return spPanelX + 4, spPanelY + 192, 240, 44
 }
 
 var dirBtnLabels = []string{"↑ N", "→ E", "↓ S", "← W"}
-
-// Z column visualiser — drawn inside the left panel area (panelX+4 to panelX+spListW)
-const (
-	zCellW = float32(48)
-	zCellH = float32(38)
-	zColX  = panelX + 60 // inset from left panel edge
-	zColY  = panelY + 60 // below the title
-)
 
 func spZCellRect(zLevel, maxHeight int) (x, y, w, h float32) {
 	// z=0 is at the bottom, z=maxHeight-1 at the top
@@ -748,24 +771,20 @@ func spZCellRect(zLevel, maxHeight int) (x, y, w, h float32) {
 }
 
 func spZConfirmBtnRect() (x, y, w, h float32) {
-	// below the Z column, in left panel
-	return panelX + 60, float32(ScreenH) - 80, 180, 38
+	return spPanelX + 60, spPanelY + spPanelH - 80, 180, 38
 }
 
 func spDirBtnRect(i int) (x, y, w, h float32) {
-	// 2×2 grid inside left panel
 	w, h = 88, 44
 	col := float32(i % 2)
 	row := float32(i / 2)
-	x = panelX + 20 + col*(w+8)
-	y = panelY + 120 + row*(h+10)
+	x = spPanelX + 20 + col*(w+8)
+	y = spPanelY + 120 + row*(h+10)
 	return
 }
 
-// spGridOriginX/Y return the top-left pixel of the room grid in the shop panel.
-// We render it to the right of the catalog list, reusing rpCellSz.
-func spGridOriginX() float32 { return panelX + spListW + 16 }
-func spGridOriginY() float32 { return panelY + 30 }
+func spGridOriginX() float32 { return spPanelX + spListW + 16 }
+func spGridOriginY() float32 { return spPanelY + 30 }
 
 func (p *shopPanel) fullLen() int {
 	switch p.cat {
@@ -866,6 +885,7 @@ func (p *shopPanel) visibleCatalogLen() int {
 // ── draw ──────────────────────────────────────────────────────────────────────
 
 func (p *shopPanel) draw(dst *ebiten.Image) {
+	p.syncLayout()
 	if p.storageWiz != nil {
 		p.storageWiz.draw(dst)
 		return
@@ -902,7 +922,10 @@ func (p *shopPanel) draw(dst *ebiten.Image) {
 func (p *shopPanel) drawCatalog(dst *ebiten.Image, mx, my int) {
 	char := p.char
 
-	// category tabs
+	// Back to Room button
+	drawButton(dst, "← Back", spPanelX+4, spPanelY+4, 80, 26, fontS, isHovered(mx, my, spPanelX+4, spPanelY+4, 80, 26), true)
+
+	// category tabs (shifted right to make room for back button)
 	for i, lbl := range spCatLabels {
 		tx, ty, tw, th := spCatTabRect(i)
 		active := spCategory(i) == p.cat
@@ -925,9 +948,9 @@ func (p *shopPanel) drawCatalog(dst *ebiten.Image, mx, my int) {
 
 	// sort bar
 	sortNames := []string{"Name", "Price", "Vol"}
-	sortY := panelY + 36
+	sortY := spPanelY + 36
 	for si, sn := range sortNames {
-		sx := panelX + 4 + float32(si)*54
+		sx := spPanelX + 4 + float32(si)*54
 		sw := float32(50)
 		sh := float32(16)
 		active := spSort(si) == p.sortBy
@@ -952,21 +975,21 @@ func (p *shopPanel) drawCatalog(dst *ebiten.Image, mx, my int) {
 	}
 
 	// page controls
-	pageY := panelY + 52
+	pageY := spPanelY + 52
 	totalP := p.totalPages()
 	// prev
-	px := panelX + 4
+	px := spPanelX + 4
 	drawButton(dst, "◀", px, pageY, 28, 22, fontS, p.page > 0 && isHovered(mx, my, px, pageY, 28, 22), p.page > 0)
 	// page label
 	pageLabel := fmt.Sprintf("Pg %d/%d", p.page+1, totalP)
-	drawText(dst, pageLabel, float64(panelX)+40, float64(pageY)+5, fontS, colorText)
+	drawText(dst, pageLabel, float64(spPanelX)+40, float64(pageY)+5, fontS, colorText)
 	// next
-	nx := panelX + float32(spListW) - 40
+	nx := spPanelX + spListW - 40
 	drawButton(dst, "▶", nx, pageY, 28, 22, fontS, p.page < totalP-1 && isHovered(mx, my, nx, pageY, 28, 22), p.page < totalP-1)
 
 	// items (page-relative)
 	page := p.catalogPage()
-	rowBaseY := panelY + 78
+	rowBaseY := spPanelY + 78
 	for pi, idx := range page {
 		if p.cat == spCatFood {
 			f := buyablefood.All[idx]
@@ -1025,9 +1048,9 @@ func (p *shopPanel) drawCatalog(dst *ebiten.Image, mx, my int) {
 				actions = item.Actions
 			}
 		}
-		iy := float64(panelY) + 78 + float64(itemsPerPage)*32 + 8
+		iy := float64(spPanelY) + 78 + float64(itemsPerPage)*32 + 8
 		for _, a := range actions {
-			drawText(dst, "  "+a, float64(panelX)+8, iy, fontS, colorMuted)
+			drawText(dst, "  "+a, float64(spPanelX)+8, iy, fontS, colorMuted)
 			iy += 18
 		}
 	}
@@ -1039,7 +1062,7 @@ func (p *shopPanel) drawItemRow(dst *ebiten.Image, mx, my, i int, name, detail s
 }
 
 func (p *shopPanel) drawItemRowAt(dst *ebiten.Image, mx, my, pi, realIdx int, name, detail string, affordable bool, baseY float32) {
-	rx := panelX + 4
+	rx := spPanelX + 4
 	ry := baseY + float32(pi)*30
 	rw := spListW - 8
 	rh := float32(26)
@@ -1073,29 +1096,29 @@ func (p *shopPanel) drawStackConfirm(dst *ebiten.Image, mx, my int) {
 	}
 	f := *p.pendingFood
 	existing := p.char.CurrentHome.FloorItems[p.stackFloorIdx]
-	lx := float64(panelX) + 12
+	lx := float64(spPanelX) + 12
 	sameName := existing.Item.Food.Name == f.Name
 
 	if sameName {
-		drawText(dst, "Stack Food", lx, float64(panelY)+16, fontM, colorAccent)
+		drawText(dst, "Stack Food", lx, float64(spPanelY)+16, fontM, colorAccent)
 		drawText(dst, fmt.Sprintf("Buying: %s (uses: %d)", f.Name, f.UsesTotal),
-			lx, float64(panelY)+44, fontS, colorText)
+			lx, float64(spPanelY)+44, fontS, colorText)
 		drawText(dst, fmt.Sprintf("On floor: %s (uses: %d)", existing.Item.Food.Name, existing.Item.UsesRemaining),
-			lx, float64(panelY)+62, fontS, colorMuted)
-		drawText(dst, "Combine into one stack?", lx, float64(panelY)+82, fontS, colorText)
+			lx, float64(spPanelY)+62, fontS, colorMuted)
+		drawText(dst, "Combine into one stack?", lx, float64(spPanelY)+82, fontS, colorText)
 
 		mx2, my2, mw, mh := spStackMixBtnRect()
 		drawButton(dst, "Mix Together", mx2, my2, mw, mh, fontM, isHovered(mx, my, mx2, my2, mw, mh), true)
 	} else {
-		drawText(dst, "Combine Foods", lx, float64(panelY)+16, fontM, colorAccent)
+		drawText(dst, "Combine Foods", lx, float64(spPanelY)+16, fontM, colorAccent)
 		drawText(dst, fmt.Sprintf("Buying: %s (uses: %d)", f.Name, f.UsesTotal),
-			lx, float64(panelY)+44, fontS, colorText)
+			lx, float64(spPanelY)+44, fontS, colorText)
 		drawText(dst, fmt.Sprintf("On floor: %s (uses: %d)", existing.Item.Food.Name, existing.Item.UsesRemaining),
-			lx, float64(panelY)+62, fontS, colorMuted)
+			lx, float64(spPanelY)+62, fontS, colorMuted)
 
 		if result, ok := MixFoods(existing.Item.Food, f); ok {
 			drawText(dst, fmt.Sprintf("Recipe: %s + %s → %s", existing.Item.Food.Name, f.Name, result.Name),
-				lx, float64(panelY)+82, fontS, colorAccent)
+				lx, float64(spPanelY)+82, fontS, colorAccent)
 			rx, ry, rw, rh := spRecipeBtnRect()
 			drawButton(dst, fmt.Sprintf("Combine into %s", result.Name), rx, ry, rw, rh, fontM,
 				isHovered(mx, my, rx, ry, rw, rh), true)
@@ -1114,15 +1137,15 @@ func (p *shopPanel) drawStorageChoice(dst *ebiten.Image, mx, my int) {
 		return
 	}
 	f := *p.pendingFood
-	lx := float64(panelX) + 12
-	drawText(dst, "Choose Storage", lx, float64(panelY)+16, fontM, colorAccent)
-	drawText(dst, fmt.Sprintf("Where to store %s?", f.Name), lx, float64(panelY)+44, fontS, colorText)
+	lx := float64(spPanelX) + 12
+	drawText(dst, "Choose Storage", lx, float64(spPanelY)+16, fontM, colorAccent)
+	drawText(dst, fmt.Sprintf("Where to store %s?", f.Name), lx, float64(spPanelY)+44, fontS, colorText)
 
 	char := p.char
 	for i, fri := range p.storageOptions {
 		placed := char.CurrentHome.RoomItems[fri]
-		bx := float32(panelX) + 20
-		by := float32(panelY) + 80 + float32(i)*40
+		bx := spPanelX + 20
+		by := spPanelY + 80 + float32(i)*40
 		bw := float32(200)
 		bh := float32(34)
 		label := fmt.Sprintf("%s (%d/%d slots)", placed.Item.Name,
@@ -1140,9 +1163,9 @@ func (p *shopPanel) drawUtilityChoice(dst *ebiten.Image, mx, my int) {
 	}
 	f := *p.pendingFood
 	util := p.char.CurrentHome.FloorItems[p.utilOptionIdx]
-	lx := float64(panelX) + 12
-	drawText(dst, "Use Utility?", lx, float64(panelY)+16, fontM, colorAccent)
-	drawText(dst, fmt.Sprintf("%s + %s", f.Name, util.Item.Utility.Name), lx, float64(panelY)+44, fontS, colorText)
+	lx := float64(spPanelX) + 12
+	drawText(dst, "Use Utility?", lx, float64(spPanelY)+16, fontM, colorAccent)
+	drawText(dst, fmt.Sprintf("%s + %s", f.Name, util.Item.Utility.Name), lx, float64(spPanelY)+44, fontS, colorText)
 
 	mx2, my2, mw, mh := spStackMixBtnRect()
 	label := fmt.Sprintf("Use %s", util.Item.Utility.Name)
